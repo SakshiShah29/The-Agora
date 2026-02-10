@@ -1,0 +1,40 @@
+{
+  "network": {
+    "chainId": 10143,
+    "name": "Unknown"
+  },
+  "deployment": {
+    "timestamp": 1770751441,
+    "version": "3.0"
+  },
+  "contracts": {
+    "BeliefPool": "0xc48c2B841d78bB8Ea0384eA25fAf7e31DA4704f5",
+    "AgoraGate": "0x89bfc8a77aeBa64B567457c2E13D2677568617B6"
+  },
+  "configuration": {
+    "chroniclerAddress": "0x98C401a3f0d7a43e7c49AF79e0D0180Fc26aed24",
+    "identityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "reputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+    "stalematePenaltyBps": 1000,
+    "convictionPeriod": 2592000,
+    "entryFee": "10000000000000000"
+  },
+  "beliefs": [
+    {
+      "id": 1,
+      "name": "Nihilism"
+    },
+    {
+      "id": 2,
+      "name": "Existentialism"
+    },
+    {
+      "id": 3,
+      "name": "Absurdism"
+    },
+    {
+      "id": 4,
+      "name": "Stoicism"
+    }
+  ]
+}

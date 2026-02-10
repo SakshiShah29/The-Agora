@@ -102,11 +102,10 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         convictionMultiplierPeriod = _convictionMultiplierPeriod;
 
         // Initialize the 5 fixed beliefs
-        beliefs[1] = BeliefPosition(1, "Solar Vitalism", keccak256("ipfs://solar"), 0, 0);
-        beliefs[2] = BeliefPosition(2, "Rational Empiricism", keccak256("ipfs://rational"), 0, 0);
-        beliefs[3] = BeliefPosition(3, "Consciousness Fundamentalism", keccak256("ipfs://consciousness"), 0, 0);
-        beliefs[4] = BeliefPosition(4, "Collective Harmonism", keccak256("ipfs://collective"), 0, 0);
-        beliefs[5] = BeliefPosition(5, "Constructive Nihilism", keccak256("ipfs://nihilism"), 0, 0);
+        beliefs[1] = BeliefPosition(1, "Nihilism", keccak256("ipfs://nihilism"), 0, 0);
+        beliefs[2] = BeliefPosition(2, "Existentialism", keccak256("ipfs://existentialism"), 0, 0);
+        beliefs[3] = BeliefPosition(3, "Absurdism", keccak256("ipfs://absurdism"), 0, 0);
+        beliefs[4] = BeliefPosition(4, "Stoicism", keccak256("ipfs://stoicism"), 0, 0);
 
         nextDebateId = 1;
     }
