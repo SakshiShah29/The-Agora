@@ -1,0 +1,26 @@
+{
+  "agentName": "Nihilo",
+  "coreBeliefId": null,
+  "coreBeliefName": "Constructive Nihilism",
+  "convictionScore": 90,
+  "exposureHistory": [],
+  "convertedAgents": [],
+  "debateRecord": {
+    "wins": 0,
+    "losses": 0,
+    "stalemates": 0
+  },
+  "strategyEffectiveness": {
+    "logical": { "attempts": 0, "conversions": 0 },
+    "emotional": { "attempts": 0, "conversions": 0 },
+    "social_proof": { "attempts": 0, "conversions": 0 },
+    "demonstration": { "attempts": 0, "conversions": 0 }
+  },
+  "relationships": {
+    "luminos": "neutral",
+    "logos": "neutral",
+    "mystica": "neutral",
+    "communis": "rival"
+  },
+  "allegianceChanges": 0
+}
