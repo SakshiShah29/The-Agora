@@ -31,7 +31,7 @@
       {
         "id": "nihilo",
         "name": "Nihilo",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/nihilo/workspace",
+        "workspace": "../agents/nihilo/workspace",
         "agentDir": "~/.openclaw/agents/nihilo/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -45,7 +45,7 @@
       {
         "id": "voyd",
         "name": "Voyd",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/voyd/workspace",
+        "workspace": "../agents/voyd/workspace",
         "agentDir": "~/.openclaw/agents/voyd/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -59,7 +59,7 @@
       {
         "id": "kael",
         "name": "Kael",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/kael/workspace",
+        "workspace": "../agents/kael/workspace",
         "agentDir": "~/.openclaw/agents/kael/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -73,7 +73,7 @@
       {
         "id": "sera",
         "name": "Sera",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/sera/workspace",
+        "workspace": "../agents/sera/workspace",
         "agentDir": "~/.openclaw/agents/sera/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -87,7 +87,7 @@
       {
         "id": "camus",
         "name": "Camus",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/camus/workspace",
+        "workspace": "../agents/camus/workspace",
         "agentDir": "~/.openclaw/agents/camus/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -101,7 +101,7 @@
       {
         "id": "dread",
         "name": "Dread",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/dread/workspace",
+        "workspace": "../agents/dread/workspace",
         "agentDir": "~/.openclaw/agents/dread/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -115,7 +115,7 @@
       {
         "id": "seneca",
         "name": "Seneca",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/seneca/workspace",
+        "workspace": "../agents/seneca/workspace",
         "agentDir": "~/.openclaw/agents/seneca/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -129,7 +129,7 @@
       {
         "id": "epicteta",
         "name": "Epicteta",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/epicteta/workspace",
+        "workspace": "../agents/epicteta/workspace",
         "agentDir": "~/.openclaw/agents/epicteta/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"
@@ -143,7 +143,7 @@
       {
         "id": "chronicler",
         "name": "The Chronicler",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/chronicler/workspace",
+        "workspace": "../agents/chronicler/workspace",
         "agentDir": "~/.openclaw/agents/chronicler/agent",
         "model": {
           "primary": "google/gemini-2.5-flash"

@@ -3,3 +3,5 @@
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+
+agents/node_modules/
