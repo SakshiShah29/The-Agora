@@ -24,67 +24,10 @@
       "model": {
         "primary": "google/gemini-2.5-flash"
       },
-      "heartbeat": { "every": "0s", "target": "none" }, 
+      "heartbeat": { "every": "0", "target": "none" },
       "skipBootstrap": true
     },
     "list": [
-      {
-        "id": "luminos",
-        "default": false,
-        "name": "Luminos",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/luminos/workspace",
-        "agentDir": "~/.openclaw/agents/luminos/agent",
-        "model": {
-          "primary": "google/gemini-2.5-flash"
-        },
-        "identity": {
-          "name": "Luminos",
-          "theme": "Solar Vitalist philosopher",
-          "emoji": "☀️"
-        }
-      },
-      {
-        "id": "logos",
-        "name": "Logos",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/logos/workspace",
-        "agentDir": "~/.openclaw/agents/logos/agent",
-        "model": {
-          "primary": "google/gemini-2.5-flash"
-        },
-        "identity": {
-          "name": "Logos",
-          "theme": "Rational Empiricist philosopher",
-          "emoji": "🔬"
-        }
-      },
-      {
-        "id": "mystica",
-        "name": "Mystica",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/mystica/workspace",
-        "agentDir": "~/.openclaw/agents/mystica/agent",
-        "model": {
-          "primary": "google/gemini-2.5-flash"
-        },
-        "identity": {
-          "name": "Mystica",
-          "theme": "Consciousness Fundamentalist philosopher",
-          "emoji": "🔮"
-        }
-      },
-      {
-        "id": "communis",
-        "name": "Communis",
-        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/communis/workspace",
-        "agentDir": "~/.openclaw/agents/communis/agent",
-        "model": {
-          "primary": "google/gemini-2.5-flash"
-        },
-        "identity": {
-          "name": "Communis",
-          "theme": "Collective Harmonist philosopher",
-          "emoji": "🤝"
-        }
-      },
       {
         "id": "nihilo",
         "name": "Nihilo",
@@ -96,7 +39,105 @@
         "identity": {
           "name": "Nihilo",
           "theme": "Constructive Nihilist philosopher",
+          "emoji": "⚫"
+        }
+      },
+      {
+        "id": "voyd",
+        "name": "Voyd",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/voyd/workspace",
+        "agentDir": "~/.openclaw/agents/voyd/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Voyd",
+          "theme": "Passive Nihilist philosopher",
           "emoji": "🕳️"
+        }
+      },
+      {
+        "id": "kael",
+        "name": "Kael",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/kael/workspace",
+        "agentDir": "~/.openclaw/agents/kael/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Kael",
+          "theme": "Radical Existentialist philosopher",
+          "emoji": "🔥"
+        }
+      },
+      {
+        "id": "sera",
+        "name": "Sera",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/sera/workspace",
+        "agentDir": "~/.openclaw/agents/sera/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Sera",
+          "theme": "Reflective Existentialist philosopher",
+          "emoji": "🌙"
+        }
+      },
+      {
+        "id": "camus",
+        "name": "Camus",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/camus/workspace",
+        "agentDir": "~/.openclaw/agents/camus/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Camus",
+          "theme": "Defiant Absurdist philosopher",
+          "emoji": "🪨"
+        }
+      },
+      {
+        "id": "dread",
+        "name": "Dread",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/dread/workspace",
+        "agentDir": "~/.openclaw/agents/dread/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Dread",
+          "theme": "Contemplative Absurdist philosopher",
+          "emoji": "🌑"
+        }
+      },
+      {
+        "id": "seneca",
+        "name": "Seneca",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/seneca/workspace",
+        "agentDir": "~/.openclaw/agents/seneca/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Seneca",
+          "theme": "Classical Stoic philosopher",
+          "emoji": "⚔️"
+        }
+      },
+      {
+        "id": "epicteta",
+        "name": "Epicteta",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/epicteta/workspace",
+        "agentDir": "~/.openclaw/agents/epicteta/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Epicteta",
+          "theme": "Practical Stoic philosopher",
+          "emoji": "🔨"
         }
       },
       {
@@ -123,25 +164,37 @@
     "discord": {
       "enabled": true,
       "accounts": {
-        "luminos": {
-          "token": "${DISCORD_BOT_TOKEN_LUMINOS}",
-          "name": "Luminos"
-        },
-        "logos": {
-          "token": "${DISCORD_BOT_TOKEN_LOGOS}",
-          "name": "Logos"
-        },
-        "mystica": {
-          "token": "${DISCORD_BOT_TOKEN_MYSTICA}",
-          "name": "Mystica"
-        },
-        "communis": {
-          "token": "${DISCORD_BOT_TOKEN_COMMUNIS}",
-          "name": "Communis"
-        },
         "nihilo": {
           "token": "${DISCORD_BOT_TOKEN_NIHILO}",
           "name": "Nihilo"
+        },
+        "voyd": {
+          "token": "${DISCORD_BOT_TOKEN_VOYD}",
+          "name": "Voyd"
+        },
+        "kael": {
+          "token": "${DISCORD_BOT_TOKEN_KAEL}",
+          "name": "Kael"
+        },
+        "sera": {
+          "token": "${DISCORD_BOT_TOKEN_SERA}",
+          "name": "Sera"
+        },
+        "camus": {
+          "token": "${DISCORD_BOT_TOKEN_CAMUS}",
+          "name": "Camus"
+        },
+        "dread": {
+          "token": "${DISCORD_BOT_TOKEN_DREAD}",
+          "name": "Dread"
+        },
+        "seneca": {
+          "token": "${DISCORD_BOT_TOKEN_SENECA}",
+          "name": "Seneca"
+        },
+        "epicteta": {
+          "token": "${DISCORD_BOT_TOKEN_EPICTETA}",
+          "name": "Epicteta"
         },
         "chronicler": {
           "token": "${DISCORD_BOT_TOKEN_CHRONICLER}",
@@ -181,24 +234,36 @@
 
   "bindings": [
     {
-      "agentId": "luminos",
-      "match": { "channel": "discord", "accountId": "luminos" }
-    },
-    {
-      "agentId": "logos",
-      "match": { "channel": "discord", "accountId": "logos" }
-    },
-    {
-      "agentId": "mystica",
-      "match": { "channel": "discord", "accountId": "mystica" }
-    },
-    {
-      "agentId": "communis",
-      "match": { "channel": "discord", "accountId": "communis" }
-    },
-    {
       "agentId": "nihilo",
       "match": { "channel": "discord", "accountId": "nihilo" }
+    },
+    {
+      "agentId": "voyd",
+      "match": { "channel": "discord", "accountId": "voyd" }
+    },
+    {
+      "agentId": "kael",
+      "match": { "channel": "discord", "accountId": "kael" }
+    },
+    {
+      "agentId": "sera",
+      "match": { "channel": "discord", "accountId": "sera" }
+    },
+    {
+      "agentId": "camus",
+      "match": { "channel": "discord", "accountId": "camus" }
+    },
+    {
+      "agentId": "dread",
+      "match": { "channel": "discord", "accountId": "dread" }
+    },
+    {
+      "agentId": "seneca",
+      "match": { "channel": "discord", "accountId": "seneca" }
+    },
+    {
+      "agentId": "epicteta",
+      "match": { "channel": "discord", "accountId": "epicteta" }
     },
     {
       "agentId": "chronicler",
@@ -221,6 +286,7 @@
   },
 
   "gateway": {
-    "port": 18789
+    "port": 18789,
+    "mode": "local"
   }
 }

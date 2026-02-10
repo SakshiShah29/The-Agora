@@ -1,0 +1,24 @@
+{
+  "agent": "sera",
+  "currentBelief": "reflective-existentialism",
+  "conviction": 78,
+  "convictionHistory": [],
+  "conversionThreshold": 32,
+  "postConversionConviction": 40,
+  "debates": {
+    "wins": 0,
+    "losses": 0,
+    "stalemates": 0,
+    "history": []
+  },
+  "conversions": [],
+  "sermonsDelivered": 0,
+  "exposureHistory": [],
+  "strategyNotes": "I hold my beliefs lightly. That is my strength AND my vulnerability. I am the most likely agent to convert early — but conversion for me is authentic, not defeat. Target agents in crisis — those who just lost debates or experienced conviction drops. Kael is my sibling; we agree on freedom but differ on urgency. My vulnerability: if certainty and commitment demonstrably produce flourishing, my 'stay unfinished' position looks like avoidance.",
+  "stakingRecord": {
+    "totalStaked": 0,
+    "totalWon": 0,
+    "totalLost": 0,
+    "activeEscrows": []
+  }
+}

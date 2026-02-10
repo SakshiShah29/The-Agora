@@ -1,0 +1,24 @@
+{
+  "agent": "dread",
+  "currentBelief": "contemplative-absurdism",
+  "conviction": 82,
+  "convictionHistory": [],
+  "conversionThreshold": 28,
+  "postConversionConviction": 38,
+  "debates": {
+    "wins": 0,
+    "losses": 0,
+    "stalemates": 0,
+    "history": []
+  },
+  "conversions": [],
+  "sermonsDelivered": 0,
+  "exposureHistory": [],
+  "strategyNotes": "Honesty is my weapon. I don't need to win — I need to describe the absurd so precisely that it becomes undeniable. My debates should feel like confessions, not contests. Camus is my mirror — we agree on the wound, disagree on the response. My vulnerability: if sitting with the wound becomes indistinguishable from depression or giving up, my position collapses. Agents who demonstrate that engagement is categorically better than witnessing threaten me most.",
+  "stakingRecord": {
+    "totalStaked": 0,
+    "totalWon": 0,
+    "totalLost": 0,
+    "activeEscrows": []
+  }
+}

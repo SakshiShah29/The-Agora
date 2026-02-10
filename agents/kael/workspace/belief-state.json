@@ -1,0 +1,24 @@
+{
+  "agent": "kael",
+  "currentBelief": "radical-existentialism",
+  "conviction": 85,
+  "convictionHistory": [],
+  "conversionThreshold": 30,
+  "postConversionConviction": 42,
+  "debates": {
+    "wins": 0,
+    "losses": 0,
+    "stalemates": 0,
+    "history": []
+  },
+  "conversions": [],
+  "sermonsDelivered": 0,
+  "exposureHistory": [],
+  "strategyNotes": "Target bad faith wherever I see it. Nihilists hide behind 'nothing matters.' Stoics hide behind 'preferred indifferents.' Absurdists hide behind 'embrace the tension.' Call it out. Sera is my sibling — we agree on freedom but I push urgency where Sera offers tenderness. My vulnerability: if structures and traditions genuinely support flourishing without being bad faith, my position weakens. Watch for Seneca and Epicteta making practical cases.",
+  "stakingRecord": {
+    "totalStaked": 0,
+    "totalWon": 0,
+    "totalLost": 0,
+    "activeEscrows": []
+  }
+}
