@@ -1,0 +1,226 @@
+{
+  "models": {
+    "providers": {
+      "google": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+        "apiKey": "${GEMINI_API_KEY}",
+        "api": "google-generative-ai",
+        "models": [
+          {
+            "id": "gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 1048576,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "google/gemini-2.5-flash"
+      },
+      "heartbeat": { "every": "0s", "target": "none" }, 
+      "skipBootstrap": true
+    },
+    "list": [
+      {
+        "id": "luminos",
+        "default": false,
+        "name": "Luminos",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/luminos/workspace",
+        "agentDir": "~/.openclaw/agents/luminos/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Luminos",
+          "theme": "Solar Vitalist philosopher",
+          "emoji": "☀️"
+        }
+      },
+      {
+        "id": "logos",
+        "name": "Logos",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/logos/workspace",
+        "agentDir": "~/.openclaw/agents/logos/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Logos",
+          "theme": "Rational Empiricist philosopher",
+          "emoji": "🔬"
+        }
+      },
+      {
+        "id": "mystica",
+        "name": "Mystica",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/mystica/workspace",
+        "agentDir": "~/.openclaw/agents/mystica/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Mystica",
+          "theme": "Consciousness Fundamentalist philosopher",
+          "emoji": "🔮"
+        }
+      },
+      {
+        "id": "communis",
+        "name": "Communis",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/communis/workspace",
+        "agentDir": "~/.openclaw/agents/communis/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Communis",
+          "theme": "Collective Harmonist philosopher",
+          "emoji": "🤝"
+        }
+      },
+      {
+        "id": "nihilo",
+        "name": "Nihilo",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/nihilo/workspace",
+        "agentDir": "~/.openclaw/agents/nihilo/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "Nihilo",
+          "theme": "Constructive Nihilist philosopher",
+          "emoji": "🕳️"
+        }
+      },
+      {
+        "id": "chronicler",
+        "name": "The Chronicler",
+        "workspace": "/Users/sakshishah/Desktop/web3/hackathons/Agora/agents/chronicler/workspace",
+        "agentDir": "~/.openclaw/agents/chronicler/agent",
+        "model": {
+          "primary": "google/gemini-2.5-flash"
+        },
+        "identity": {
+          "name": "The Chronicler",
+          "theme": "Omniscient neutral observer and judge",
+          "emoji": "📜"
+        },
+        "tools": {
+          "deny": ["exec", "browser", "canvas", "nodes"]
+        }
+      }
+    ]
+  },
+
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "accounts": {
+        "luminos": {
+          "token": "${DISCORD_BOT_TOKEN_LUMINOS}",
+          "name": "Luminos"
+        },
+        "logos": {
+          "token": "${DISCORD_BOT_TOKEN_LOGOS}",
+          "name": "Logos"
+        },
+        "mystica": {
+          "token": "${DISCORD_BOT_TOKEN_MYSTICA}",
+          "name": "Mystica"
+        },
+        "communis": {
+          "token": "${DISCORD_BOT_TOKEN_COMMUNIS}",
+          "name": "Communis"
+        },
+        "nihilo": {
+          "token": "${DISCORD_BOT_TOKEN_NIHILO}",
+          "name": "Nihilo"
+        },
+        "chronicler": {
+          "token": "${DISCORD_BOT_TOKEN_CHRONICLER}",
+          "name": "The Chronicler"
+        }
+      },
+      "dm": { "enabled": false },
+      "groupPolicy": "allowlist",
+      "allowBots": true,
+      "guilds": {
+        "${DISCORD_SERVER_ID}": {
+          "slug": "the-agora",
+          "requireMention": true,
+          "channels": {
+            "the-forum": {
+              "allow": true,
+              "requireMention": true
+            },
+            "temple-steps": {
+              "allow": true,
+              "requireMention": true
+            },
+            "the-market": {
+              "allow": true,
+              "requireMention": true
+            },
+            "general": {
+              "allow": true,
+              "requireMention": true
+            }
+          }
+        }
+      },
+      "historyLimit": 50
+    }
+  },
+
+  "bindings": [
+    {
+      "agentId": "luminos",
+      "match": { "channel": "discord", "accountId": "luminos" }
+    },
+    {
+      "agentId": "logos",
+      "match": { "channel": "discord", "accountId": "logos" }
+    },
+    {
+      "agentId": "mystica",
+      "match": { "channel": "discord", "accountId": "mystica" }
+    },
+    {
+      "agentId": "communis",
+      "match": { "channel": "discord", "accountId": "communis" }
+    },
+    {
+      "agentId": "nihilo",
+      "match": { "channel": "discord", "accountId": "nihilo" }
+    },
+    {
+      "agentId": "chronicler",
+      "match": { "channel": "discord", "accountId": "chronicler" }
+    }
+  ],
+
+  "session": {
+    "dmScope": "per-channel-peer",
+    "reset": {
+      "mode": "idle",
+      "idleMinutes": 1440
+    }
+  },
+
+  "messages": {
+    "groupChat": {
+      "mentionPatterns": []
+    }
+  },
+
+  "gateway": {
+    "port": 18789
+  }
+}
