@@ -197,6 +197,7 @@ export function recordDebateOutcome(
     state.stakingRecord.totalLost += amountMON;
     state.debates.losses += 1;
   } else {
+   state.stakingRecord.totalLost += amountMON * 0.1; // ~10% penalty (adjust to match your stalematePenaltyBps)
     state.debates.stalemates += 1;
   }
 

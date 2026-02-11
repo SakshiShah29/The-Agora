@@ -29,6 +29,7 @@ import {
   canPerformAction,
   updateCooldown
 } from './cooldowns.js';
+import { parseVerdictMessage, determineAgentOutcome } from './verdict-parser.js';
 
 /**
  * Discord message interface (provided by OpenClaw)
@@ -276,13 +277,65 @@ async function handleSpecialStates(
     case 'AWAITING_VERDICT':
       console.log(`[decision-loop] ${context.agentName} is awaiting verdict`);
 
-      // Verdict monitoring requires Phase 7.1 implementation:
-      // 1. Chronicler must post verdict announcements to Discord (not yet implemented)
-      // 2. Then agents can monitor announcements channel and parse verdicts
-      // 3. Call recordDebateOutcome() when verdict found
-      // See: /VERDICT_ANNOUNCEMENT_ISSUE.md for full implementation plan
+      // Load active debate state to get debateId and stakeAmount
+      const verdictDebatePath = path.join(context.workspace, 'active-debate.json');
+      try {
+        const verdictDebateRaw = await fs.readFile(verdictDebatePath, 'utf-8');
+        const verdictDebate = JSON.parse(verdictDebateRaw);
 
-      console.log(`[decision-loop] Waiting for Chronicler verdict announcement (Phase 7.1 pending)`);
+        // Get recent messages from announcements channel
+        // Look back up to 1 hour for verdict messages
+        const lookbackTime = verdictDebate.lastActivityAt || (Date.now() - 3_600_000);
+        const verdictMessages = await context.discord.getLatestMessages(
+          context.channelIds.announcements,
+          lookbackTime
+        );
+
+        // Scan messages for verdict matching our debate
+        for (const msg of verdictMessages) {
+          const verdict = parseVerdictMessage(msg.content);
+
+          // Skip non-verdict messages or verdicts for other debates
+          if (!verdict.isVerdict || verdict.debateId !== verdictDebate.debateId) {
+            continue;
+          }
+
+          console.log(`[decision-loop] 📊 Verdict found for debate #${verdict.debateId}`);
+
+          // Determine outcome for this specific agent
+          const outcome = determineAgentOutcome(verdict, context.agentName);
+
+          if (outcome) {
+            console.log(`[decision-loop] Result: ${outcome}`);
+
+            // Record outcome in belief-state.json
+            recordDebateOutcome(
+              context.workspace,
+              verdict.debateId!,
+              outcome,
+              verdictDebate.stakeAmount
+            );
+
+            // Clear active debate file → transitions agent back to ACTIVE
+            try {
+              await fs.unlink(verdictDebatePath);
+              console.log(`[decision-loop] ✅ active-debate.json cleared`);
+            } catch (unlinkError) {
+              console.error(`[decision-loop] ⚠️ Failed to clear active-debate.json:`, unlinkError);
+            }
+
+            console.log(`[decision-loop] ✅ Debate #${verdict.debateId} — ${outcome} recorded`);
+            return true;
+          }
+        }
+
+        console.log(`[decision-loop] ⏳ No verdict yet for debate #${verdictDebate.debateId}`);
+      } catch (error) {
+        // No active-debate.json found — shouldn't be in AWAITING_VERDICT
+        console.warn(`[decision-loop] ⚠️ In AWAITING_VERDICT but no active-debate.json found`);
+        console.warn(`[decision-loop] This may indicate a stale lifecycle state`);
+      }
+
       return true;
 
     case 'CONVERTING':

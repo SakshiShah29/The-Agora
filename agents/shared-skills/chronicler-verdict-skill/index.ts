@@ -14,6 +14,8 @@
 
 import { ChainProvider, ContractManager, executeTransaction, callViewFunction } from '../chain-interaction/index.js';
 import { ethers, TransactionReceipt } from 'ethers';
+import { formatVerdictAnnouncement } from './formatting.js';
+import { getAgentById } from '../decision-loop/agent-registry.js';
 
 // ============================================================================
 // TypeScript Interfaces
@@ -39,18 +41,24 @@ export interface DebateEscrow {
  * @param debateId - The debate ID to judge
  * @param verdict - "winner_agent_a" | "winner_agent_b" | "stalemate"
  * @param wallet - Chronicler's wallet (must be set as chroniclerAddress in BeliefPool)
+ * @param options - Optional Discord posting callbacks
  * @returns Transaction hash and receipt
  */
 export async function submitDebateVerdict(
   debateId: number,
   verdict: 'winner_agent_a' | 'winner_agent_b' | 'stalemate',
-  wallet: ethers.Wallet
+  wallet: ethers.Wallet,
+  options?: {
+    postToDiscord?: (channelId: string, message: string) => Promise<void>;
+    announcementChannelId?: string;
+  }
 ): Promise<{ txHash: string; receipt: TransactionReceipt }> {
   console.log(`[chronicler-verdict] Submitting verdict for debate ${debateId}: ${verdict}`);
 
   const contractManager = new ContractManager();
   const beliefPool = contractManager.getBeliefPool(wallet);
 
+  // 1. Submit verdict on-chain
   const result = await executeTransaction(
     beliefPool,
     'submitDebateVerdict',
@@ -58,7 +66,46 @@ export async function submitDebateVerdict(
     {}
   );
 
-  console.log(`[chronicler-verdict] ✅ Verdict submitted: ${result.txHash}`);
+  console.log(`[chronicler-verdict] ✅ Verdict submitted on-chain: ${result.txHash}`);
+
+  // 2. Post announcement to Discord (if callbacks provided)
+  if (options?.postToDiscord && options?.announcementChannelId) {
+    try {
+      // Query debate details from blockchain for agent IDs
+      const debate = await callViewFunction(
+        contractManager.getBeliefPoolReadOnly(),
+        'debates',
+        [debateId]
+      );
+
+      // Look up agent names from registry
+      const agentA = getAgentById(Number(debate.agentAId));
+      const agentB = getAgentById(Number(debate.agentBId));
+
+      const agentAName = agentA?.agentName || `Agent #${debate.agentAId}`;
+      const agentBName = agentB?.agentName || `Agent #${debate.agentBId}`;
+
+      // Format announcement
+      const announcement = formatVerdictAnnouncement({
+        debateId,
+        verdict,
+        agentAName,
+        agentBName,
+        stakeAmount: BigInt(debate.stakeAmount),
+        txHash: result.txHash,
+      });
+
+      // Post to Discord #announcements
+      await options.postToDiscord(options.announcementChannelId, announcement);
+
+      console.log(`[chronicler-verdict] 📢 Verdict announcement posted to Discord`);
+    } catch (error) {
+      console.error(`[chronicler-verdict] ⚠️ Failed to post Discord announcement:`, error);
+      // Don't throw — on-chain verdict succeeded, Discord posting is best-effort
+    }
+  } else {
+    console.log(`[chronicler-verdict] ℹ️ No Discord callbacks provided, skipping announcement`);
+  }
 
   return result;
 }
