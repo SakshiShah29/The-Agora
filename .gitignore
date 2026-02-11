@@ -6,3 +6,5 @@ contracts/broadcast/
 
 agents/node_modules/
 agents/dist/
+
+/node_modules
