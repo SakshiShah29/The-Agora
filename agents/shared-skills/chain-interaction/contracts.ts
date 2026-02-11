@@ -17,9 +17,6 @@ const agoraGateABI = JSON.parse(
 const identityRegistryABI = JSON.parse(
   readFileSync(join(__dirname, 'abis/IdentityRegistry.json'), 'utf-8')
 );
-const reputationRegistryABI = JSON.parse(
-  readFileSync(join(__dirname, 'abis/ReputationRegistry.json'), 'utf-8')
-);
 
 /**
  * ContractManager - Manages contract instances and addresses
@@ -32,22 +29,19 @@ export class ContractManager {
   beliefPoolAddress: string;
   agoraGateAddress: string;
   identityRegistryAddress: string;
-  reputationRegistryAddress: string;
 
   constructor() {
     this.chainProvider = new ChainProvider();
 
     // Load addresses from environment or use defaults
-    this.beliefPoolAddress = process.env.BELIEF_POOL || '0xc48c2B841d78bB8Ea0384eA25fAf7e31DA4704f5';
-    this.agoraGateAddress = process.env.AGORA_GATE || '0x89bfc8a77aeBa64B567457c2E13D2677568617B6';
+    this.beliefPoolAddress = process.env.BELIEF_POOL || '0xD3Eb75De9008B1e94a508241Cbe1dE64E1CE9D9F';
+    this.agoraGateAddress = process.env.AGORA_GATE || '0x5e629A3901524a82149BaC35A405ce76660F7DEe';
     this.identityRegistryAddress = process.env.IDENTITY_REGISTRY || '0x8004A818BFB912233c491871b3d84c89A494BD9e';
-    this.reputationRegistryAddress = process.env.REPUTATION_REGISTRY || '0x8004B663056A597Dffe9eCcC1965A193B7388713';
 
     console.log('[ContractManager] Initialized with addresses:');
     console.log(`  BeliefPool: ${this.beliefPoolAddress}`);
     console.log(`  AgoraGate: ${this.agoraGateAddress}`);
     console.log(`  IdentityRegistry: ${this.identityRegistryAddress}`);
-    console.log(`  ReputationRegistry: ${this.reputationRegistryAddress}`);
   }
 
   /**
@@ -90,19 +84,6 @@ export class ContractManager {
   }
 
   /**
-   * Get ReputationRegistry contract instance (ERC-8004)
-   * @param signer - Wallet to sign transactions
-   * @returns ReputationRegistry contract instance
-   */
-  getReputationRegistry(signer: ethers.Wallet): Contract {
-    return new ethers.Contract(
-      this.reputationRegistryAddress,
-      reputationRegistryABI,
-      signer
-    );
-  }
-
-  /**
    * Get read-only BeliefPool contract instance (no signer needed)
    * Useful for view functions that don't modify state
    * @returns BeliefPool contract instance connected to provider
@@ -135,18 +116,6 @@ export class ContractManager {
     return new ethers.Contract(
       this.identityRegistryAddress,
       identityRegistryABI,
-      this.chainProvider.provider
-    );
-  }
-
-  /**
-   * Get read-only ReputationRegistry contract instance (no signer needed)
-   * @returns ReputationRegistry contract instance connected to provider
-   */
-  getReputationRegistryReadOnly(): Contract {
-    return new ethers.Contract(
-      this.reputationRegistryAddress,
-      reputationRegistryABI,
       this.chainProvider.provider
     );
   }

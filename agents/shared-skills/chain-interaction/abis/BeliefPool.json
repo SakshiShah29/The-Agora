@@ -8,11 +8,6 @@
         "internalType": "address"
       },
       {
-        "name": "_reputationRegistry",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
         "name": "_stalematePenaltyBps",
         "type": "uint256",
         "internalType": "uint256"
@@ -27,6 +22,45 @@
   },
   {
     "type": "function",
+    "name": "INITIAL_REPUTATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int128",
+        "internalType": "int128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_REPUTATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int128",
+        "internalType": "int128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_REPUTATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int128",
+        "internalType": "int128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MIN_STAKE_AMOUNT",
     "inputs": [],
     "outputs": [
@@ -34,6 +68,44 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "agentCurrentBelief",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "agentReputation",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int128",
+        "internalType": "int128"
       }
     ],
     "stateMutability": "view"
@@ -553,19 +625,6 @@
   },
   {
     "type": "function",
-    "name": "reputationRegistry",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IReputationRegistry"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "setAgoraGateTreasury",
     "inputs": [
       {
@@ -810,6 +869,31 @@
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ReputationUpdated",
+    "inputs": [
+      {
+        "name": "agentId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newScore",
+        "type": "int128",
+        "indexed": false,
+        "internalType": "int128"
+      },
+      {
+        "name": "delta",
+        "type": "int128",
+        "indexed": false,
+        "internalType": "int128"
       }
     ],
     "anonymous": false
