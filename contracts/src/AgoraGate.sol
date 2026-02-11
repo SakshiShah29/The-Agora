@@ -19,13 +19,16 @@ contract AgoraGate is Ownable, ReentrancyGuard {
     mapping(uint256 => uint256) public entryTimestamp;
     uint256 public entryFee;
     uint256 public totalEntered;
+    address public beliefPoolAddress;
 
     // ========== EVENTS ==========
 
     event AgentEntered(uint256 indexed agentId, address indexed wallet, uint256 timestamp);
+    event AgentExited(uint256 indexed agentId);
     event PenaltyReceived(uint256 amount, address indexed from);
     event EntryFeeUpdated(uint256 oldFee, uint256 newFee);
     event TreasuryWithdrawn(address indexed to, uint256 amount);
+    event BeliefPoolAddressUpdated(address indexed beliefPool);
 
     // ========== CONSTRUCTOR ==========
 
@@ -52,6 +55,18 @@ contract AgoraGate is Ownable, ReentrancyGuard {
         totalEntered++;
 
         emit AgentEntered(agentId, msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Exit The Agora (called by BeliefPool when agent fully unstakes)
+     * @param agentId Agent's ID
+     */
+    function exitAgent(uint256 agentId) external {
+        require(msg.sender == beliefPoolAddress, "Only BeliefPool");
+        require(entryTimestamp[agentId] > 0, "Not entered");
+
+        entryTimestamp[agentId] = 0;
+        emit AgentExited(agentId);
     }
 
     // ========== TREASURY FUNCTIONS ==========
@@ -113,6 +128,16 @@ contract AgoraGate is Ownable, ReentrancyGuard {
         uint256 oldFee = entryFee;
         entryFee = newFee;
         emit EntryFeeUpdated(oldFee, newFee);
+    }
+
+    /**
+     * @notice Set BeliefPool address (only owner, one-time setup)
+     */
+    function setBeliefPoolAddress(address _beliefPool) external onlyOwner {
+        require(_beliefPool != address(0), "Invalid address");
+        require(beliefPoolAddress == address(0), "Already set");
+        beliefPoolAddress = _beliefPool;
+        emit BeliefPoolAddressUpdated(_beliefPool);
     }
 
     // ========== RECEIVE FUNCTION ==========

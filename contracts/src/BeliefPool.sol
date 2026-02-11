@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IIdentityRegistry.sol";
-import "./interfaces/IReputationRegistry.sol";
 
 /**
  * @title BeliefPool
@@ -51,7 +50,6 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     // ========== STATE VARIABLES ==========
 
     IIdentityRegistry public immutable identityRegistry;
-    IReputationRegistry public immutable reputationRegistry;
 
     address public chroniclerAddress;
     address public agoraGateTreasury;
@@ -71,6 +69,18 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     // debateId => DebateEscrow
     mapping(uint256 => DebateEscrow) public debates;
 
+    // agentId => reputation score (0-100, starts at 60)
+    mapping(uint256 => int128) public agentReputation;
+
+    // agentId => current belief they are staked on (0 if not staked)
+    mapping(uint256 => uint256) public agentCurrentBelief;
+
+    // ========== CONSTANTS ==========
+
+    int128 public constant INITIAL_REPUTATION = 60;
+    int128 public constant MAX_REPUTATION = 100;
+    int128 public constant MIN_REPUTATION = 1;
+
     // ========== EVENTS ==========
 
     event Staked(uint256 indexed agentId, uint256 indexed beliefId, uint256 amount, uint256 timestamp);
@@ -83,21 +93,19 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     event ChroniclerAddressUpdated(address indexed chronicler);
     event AgoraGateTreasuryUpdated(address indexed treasury);
     event StalematePenaltyUpdated(uint256 penaltyBps);
+    event ReputationUpdated(uint256 indexed agentId, int128 newScore, int128 delta);
 
     // ========== CONSTRUCTOR ==========
 
     constructor(
         address _identityRegistry,
-        address _reputationRegistry,
         uint256 _stalematePenaltyBps,
         uint256 _convictionMultiplierPeriod
     ) Ownable(msg.sender) {
         require(_identityRegistry != address(0), "Invalid identity registry");
-        require(_reputationRegistry != address(0), "Invalid reputation registry");
         require(_stalematePenaltyBps <= 5000, "Penalty too high");
 
         identityRegistry = IIdentityRegistry(_identityRegistry);
-        reputationRegistry = IReputationRegistry(_reputationRegistry);
         stalematePenaltyBps = _stalematePenaltyBps;
         convictionMultiplierPeriod = _convictionMultiplierPeriod;
 
@@ -106,6 +114,7 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         beliefs[2] = BeliefPosition(2, "Existentialism", keccak256("ipfs://existentialism"), 0, 0);
         beliefs[3] = BeliefPosition(3, "Absurdism", keccak256("ipfs://absurdism"), 0, 0);
         beliefs[4] = BeliefPosition(4, "Stoicism", keccak256("ipfs://stoicism"), 0, 0);
+        beliefs[5] = BeliefPosition(5, "Hedonism", keccak256("ipfs://hedonism"), 0, 0);
 
         nextDebateId = 1;
     }
@@ -120,10 +129,20 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         require(msg.value >= MIN_STAKE_AMOUNT, "Stake too low");
         _verifyAgentOwnership(agentId);
 
+        // Ensure agent can only stake on one belief at a time
+        uint256 currentBelief = agentCurrentBelief[agentId];
+        require(currentBelief == 0 || currentBelief == beliefId, "Already staked on different belief");
+
         StakeInfo storage stakeInfo = agentStakes[agentId][beliefId];
+
+        // Initialize reputation on very first stake (0 means never staked before)
+        if (agentReputation[agentId] == 0) {
+            agentReputation[agentId] = INITIAL_REPUTATION;
+        }
 
         if (stakeInfo.amount == 0) {
             beliefs[beliefId].adherentCount++;
+            agentCurrentBelief[agentId] = beliefId; // Track current belief
         }
 
         stakeInfo.amount += msg.value;
@@ -150,9 +169,12 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         stakeInfo.amount -= amount;
         beliefs[beliefId].totalStaked -= amount;
 
-        if (stakeInfo.amount == 0) {
+        bool fullyUnstaked = (stakeInfo.amount == 0);
+
+        if (fullyUnstaked) {
             beliefs[beliefId].adherentCount--;
             delete agentStakes[agentId][beliefId];
+            agentCurrentBelief[agentId] = 0; // Reset current belief
         }
 
         address wallet = _getAgentWallet(agentId);
@@ -160,6 +182,16 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         require(success, "Transfer failed");
 
         emit Unstaked(agentId, beliefId, amount);
+
+        // If agent has fully unstaked, exit Agora (if they were in it)
+        if (fullyUnstaked && agoraGateTreasury != address(0)) {
+            // Try to exit, but don't revert if they weren't in Agora
+            (bool exitSuccess, ) = agoraGateTreasury.call(
+                abi.encodeWithSignature("exitAgent(uint256)", agentId)
+            );
+            // Intentionally ignore exitSuccess - agent may not have entered
+            exitSuccess;
+        }
     }
 
     // ========== CONVERSION FUNCTION ==========
@@ -194,24 +226,13 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         newStake.beliefId = toBeliefId;
 
         delete agentStakes[agentId][fromBeliefId];
+        agentCurrentBelief[agentId] = toBeliefId; // Update current belief
 
         // Update IdentityRegistry metadata (current belief only)
         identityRegistry.setMetadata(
             agentId,
             "belief",
             abi.encode(beliefs[toBeliefId].name)
-        );
-
-        // Record conversion in ReputationRegistry
-        reputationRegistry.giveFeedback(
-            agentId,
-            50,
-            0,
-            "conversion",
-            "",
-            "",
-            "",
-            bytes32(0)
         );
 
         emit StakeMigrated(agentId, fromBeliefId, toBeliefId, amount);
@@ -232,6 +253,15 @@ contract BeliefPool is Ownable, ReentrancyGuard {
 
         _verifyAgentOwnership(agentAId);
         require(_agentExists(agentBId), "Agent B not found");
+
+        // Ensure previous debate is settled (skip check for first debate)
+        if (nextDebateId > 1) {
+            require(
+                debates[nextDebateId - 1].status == DebateStatus.SettledStalemate ||
+                debates[nextDebateId - 1].status == DebateStatus.SettledWinner,
+                "Old debate not settled"
+            );
+        }
 
         debateId = nextDebateId++;
 
@@ -303,8 +333,8 @@ contract BeliefPool is Ownable, ReentrancyGuard {
             debate.winnerId = winnerId;
 
             // Record in ReputationRegistry
-            _submitDebateFeedback(winnerId, 100, "debate_win");
-            _submitDebateFeedback(loserId, -100, "debate_loss");
+            _submitDebateFeedback(winnerId, 5, "debate_win");
+            _submitDebateFeedback(loserId, -5, "debate_loss");
 
             emit DebateSettled(debateId, winnerId, totalPot, "winner");
 
@@ -439,7 +469,8 @@ contract BeliefPool is Ownable, ReentrancyGuard {
      */
     function _verifyAgentOwnership(uint256 agentId) internal view {
         address owner = identityRegistry.ownerOf(agentId);
-        require(owner == msg.sender, "Not agent owner");
+        address wallet = identityRegistry.getAgentWallet(agentId);
+        require(msg.sender == owner || msg.sender == wallet, "Not authorized");
     }
 
     /**
@@ -492,17 +523,19 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     function _submitDebateFeedback(
         uint256 agentId,
         int128 value,
-        string memory tag1
+        string memory /* tag1 */
     ) internal {
-        reputationRegistry.giveFeedback(
-            agentId,
-            value,
-            0,
-            tag1,
-            "",
-            "",
-            "",
-            bytes32(0)
-        );
+        int128 oldScore = agentReputation[agentId];
+        int128 newScore = oldScore + value;
+
+        // Clamp between MIN and MAX
+        if (newScore > MAX_REPUTATION) {
+            newScore = MAX_REPUTATION;
+        } else if (newScore < MIN_REPUTATION) {
+            newScore = MIN_REPUTATION;
+        }
+
+        agentReputation[agentId] = newScore;
+        emit ReputationUpdated(agentId, newScore, value);
     }
 }

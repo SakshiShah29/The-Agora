@@ -36,7 +36,6 @@ contract Deploy is Script {
         console.log("=== Deploying BeliefPool ===");
         BeliefPool beliefPool = new BeliefPool(
             IDENTITY_REGISTRY,
-            REPUTATION_REGISTRY,
             STALEMATE_PENALTY_BPS,
             CONVICTION_MULTIPLIER_PERIOD
         );

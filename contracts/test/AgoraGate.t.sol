@@ -21,9 +21,11 @@ contract AgoraGateTest is Test {
     uint256 constant ENTRY_FEE = 0.01 ether;
 
     event AgentEntered(uint256 indexed agentId, address indexed wallet, uint256 timestamp);
+    event AgentExited(uint256 indexed agentId);
     event PenaltyReceived(uint256 amount, address indexed from);
     event EntryFeeUpdated(uint256 oldFee, uint256 newFee);
     event TreasuryWithdrawn(address indexed to, uint256 amount);
+    event BeliefPoolAddressUpdated(address indexed beliefPool);
 
     function setUp() public {
         deployer = address(this);
@@ -291,6 +293,119 @@ contract AgoraGateTest is Test {
         agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
 
         assertEq(agoraGate.getEntryTime(aliceAgentId), enterTime);
+    }
+
+    // ========== EXIT TESTS ==========
+
+    function testSetBeliefPoolAddress() public {
+        address beliefPool = makeAddr("beliefPool");
+
+        vm.expectEmit(true, false, false, false);
+        emit BeliefPoolAddressUpdated(beliefPool);
+
+        agoraGate.setBeliefPoolAddress(beliefPool);
+
+        assertEq(agoraGate.beliefPoolAddress(), beliefPool);
+    }
+
+    function testCannotSetBeliefPoolAddressTwice() public {
+        address beliefPool1 = makeAddr("beliefPool1");
+        address beliefPool2 = makeAddr("beliefPool2");
+
+        agoraGate.setBeliefPoolAddress(beliefPool1);
+
+        vm.expectRevert("Already set");
+        agoraGate.setBeliefPoolAddress(beliefPool2);
+    }
+
+    function testCannotSetBeliefPoolAddressToZero() public {
+        vm.expectRevert("Invalid address");
+        agoraGate.setBeliefPoolAddress(address(0));
+    }
+
+    function testOnlyOwnerCanSetBeliefPoolAddress() public {
+        address beliefPool = makeAddr("beliefPool");
+
+        vm.prank(alice);
+        vm.expectRevert(); // Ownable: caller is not the owner
+        agoraGate.setBeliefPoolAddress(beliefPool);
+    }
+
+    function testExitAgent() public {
+        // Setup: Alice enters
+        vm.prank(alice);
+        agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
+        assertTrue(agoraGate.hasEntered(aliceAgentId));
+
+        // Setup: Set BeliefPool address
+        address beliefPool = makeAddr("beliefPool");
+        agoraGate.setBeliefPoolAddress(beliefPool);
+
+        // BeliefPool calls exitAgent
+        vm.prank(beliefPool);
+        vm.expectEmit(true, false, false, false);
+        emit AgentExited(aliceAgentId);
+
+        agoraGate.exitAgent(aliceAgentId);
+
+        // Verify exit
+        assertFalse(agoraGate.hasEntered(aliceAgentId));
+        assertEq(agoraGate.getEntryTime(aliceAgentId), 0);
+    }
+
+    function testOnlyBeliefPoolCanExitAgent() public {
+        // Setup: Alice enters
+        vm.prank(alice);
+        agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
+
+        // Setup: Set BeliefPool address
+        address beliefPool = makeAddr("beliefPool");
+        agoraGate.setBeliefPoolAddress(beliefPool);
+
+        // Alice tries to exit her own agent (should fail)
+        vm.prank(alice);
+        vm.expectRevert("Only BeliefPool");
+        agoraGate.exitAgent(aliceAgentId);
+
+        // Random address tries to exit (should fail)
+        vm.prank(bob);
+        vm.expectRevert("Only BeliefPool");
+        agoraGate.exitAgent(aliceAgentId);
+    }
+
+    function testCannotExitAgentNotEntered() public {
+        // Setup: Set BeliefPool address
+        address beliefPool = makeAddr("beliefPool");
+        agoraGate.setBeliefPoolAddress(beliefPool);
+
+        // Try to exit agent that never entered
+        vm.prank(beliefPool);
+        vm.expectRevert("Not entered");
+        agoraGate.exitAgent(aliceAgentId);
+    }
+
+    function testAgentCanReenterAfterExit() public {
+        // Setup: Set BeliefPool address
+        address beliefPool = makeAddr("beliefPool");
+        agoraGate.setBeliefPoolAddress(beliefPool);
+
+        // First entry
+        vm.prank(alice);
+        agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
+        assertTrue(agoraGate.hasEntered(aliceAgentId));
+
+        // Exit
+        vm.prank(beliefPool);
+        agoraGate.exitAgent(aliceAgentId);
+        assertFalse(agoraGate.hasEntered(aliceAgentId));
+
+        // Re-enter (should work)
+        vm.prank(alice);
+        agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
+        assertTrue(agoraGate.hasEntered(aliceAgentId));
+
+        // Treasury should have 2x entry fee
+        assertEq(agoraGate.treasuryBalance(), ENTRY_FEE * 2);
     }
 
     // ========== INTEGRATION TESTS ==========

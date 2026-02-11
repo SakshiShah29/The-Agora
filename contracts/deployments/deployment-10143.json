@@ -4,12 +4,12 @@
     "name": "Unknown"
   },
   "deployment": {
-    "timestamp": 1770751441,
+    "timestamp": 1770810629,
     "version": "3.0"
   },
   "contracts": {
-    "BeliefPool": "0xc48c2B841d78bB8Ea0384eA25fAf7e31DA4704f5",
-    "AgoraGate": "0x89bfc8a77aeBa64B567457c2E13D2677568617B6"
+    "BeliefPool": "0xD3Eb75De9008B1e94a508241Cbe1dE64E1CE9D9F",
+    "AgoraGate": "0x5e629A3901524a82149BaC35A405ce76660F7DEe"
   },
   "configuration": {
     "chroniclerAddress": "0x98C401a3f0d7a43e7c49AF79e0D0180Fc26aed24",
