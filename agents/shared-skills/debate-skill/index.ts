@@ -10,6 +10,7 @@ import { issueChallenge, acceptChallenge, shouldAcceptChallenge, detectChallenge
 import { executeRound, checkTimeout, getDebateStatus } from "./rounds.js";
 import { evaluateConviction, applyConvictionResult } from "../conviction-evaluator/index.js";
 import { BeliefState, StrategyType, BeliefId } from "../conviction-evaluator/types.js";
+import { ethers } from 'ethers';
 
 interface DebateContext {
   workspacePath: string;
@@ -18,6 +19,7 @@ interface DebateContext {
   agentBelief: string;
   agentSoulMd: string;
   beliefState: BeliefState;
+  wallet: ethers.Wallet;
   postToDiscord: (channelId: string, message: string) => Promise<void>;
   getLatestMessages: (channelId: string, since: number) => Promise<Array<{ author: string; content: string; timestamp: number }>>;
 }
@@ -26,7 +28,7 @@ export async function initiateDebate(ctx: DebateContext, params: ChallengeParams
   const existing = loadDebateState(ctx.workspacePath);
   if (existing && isDebateActive(existing)) throw new Error("Already in a debate");
 
-  return issueChallenge(ctx.workspacePath, ctx.agentId, ctx.agentName, ctx.agentBelief, params, ctx.postToDiscord);
+  return issueChallenge(ctx.workspacePath, ctx.agentId, ctx.agentName, ctx.agentBelief, params, ctx.wallet, ctx.postToDiscord);
 }
 
 export async function respondToChallenge(
@@ -56,7 +58,7 @@ export async function respondToChallenge(
     return { accepted: false, reason: decision.reason };
   }
 
-  const state = await acceptChallenge(ctx.workspacePath, ctx.agentId, ctx.agentName, ctx.agentBelief, info, ctx.postToDiscord);
+  const state = await acceptChallenge(ctx.workspacePath, ctx.agentId, ctx.agentName, ctx.agentBelief, info, ctx.wallet, ctx.postToDiscord);
   return { accepted: true, state, reason: decision.reason };
 }
 

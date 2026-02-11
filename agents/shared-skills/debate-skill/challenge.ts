@@ -2,6 +2,7 @@
 import { DebateState, ChallengeParams, DEFAULT_MAX_ROUNDS } from "./types.js";
 import { createDebateState, saveDebateState } from "./state.js";
 import { createDebateEscrow, matchDebateEscrow } from "./escrow.js";
+import { ethers } from 'ethers';
 
 function formatMon(weiString: string): string {
   return (Number(BigInt(weiString)) / 1e18).toFixed(2);
@@ -82,12 +83,14 @@ export async function issueChallenge(
   agentName: string,
   agentBelief: string,
   params: ChallengeParams,
+  wallet: ethers.Wallet,
   postToDiscord: (channelId: string, message: string) => Promise<void>
 ): Promise<DebateState> {
   const debateId = await createDebateEscrow({
     challengerAgentId: agentId,
     challengedAgentId: params.targetAgentId,
     stakeAmount: params.stakeAmount,
+    challengerWallet: wallet,
   });
 
   const topic = params.topic || generateDefaultTopic(agentBelief, params.targetBelief);
@@ -135,9 +138,14 @@ export async function acceptChallenge(
     topic: string;
     channelId: string;
   },
+  wallet: ethers.Wallet,
   postToDiscord: (channelId: string, message: string) => Promise<void>
 ): Promise<DebateState> {
-  await matchDebateEscrow({ debateId: info.debateId, stakeAmount: info.stakeAmount });
+  await matchDebateEscrow({
+    debateId: info.debateId,
+    stakeAmount: info.stakeAmount,
+    acceptorWallet: wallet
+  });
 
   const state = createDebateState({
     debateId: info.debateId,
