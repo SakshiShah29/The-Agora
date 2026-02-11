@@ -1,5 +1,6 @@
 {
   "agent": "camus",
+   "coreBeliefId": 3,
   "currentBelief": "defiant-absurdism",
   "conviction": 87,
   "convictionHistory": [],
@@ -11,6 +12,18 @@
     "stalemates": 0,
     "history": []
   },
+  "relationshipMap": {
+  "Dread": "ally",
+  "Nihilo": "neutral",
+  "Voyd": "neutral",
+  "Kael": "neutral",
+  "Sera": "ally",
+  "Seneca": "rival",
+  "Epicteta": "neutral"
+},
+"convertedAgents": [],
+   "strategyEffectiveness": {},
+    "allegianceChanges": 0,
   "conversions": [],
   "sermonsDelivered": 0,
   "exposureHistory": [],

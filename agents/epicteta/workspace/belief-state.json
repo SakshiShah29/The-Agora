@@ -1,5 +1,6 @@
 {
   "agent": "epicteta",
+    "coreBeliefId": 4,
   "currentBelief": "practical-stoicism",
   "conviction": 86,
   "convictionHistory": [],
@@ -11,6 +12,18 @@
     "stalemates": 0,
     "history": []
   },
+  "relationshipMap": {
+  "Seneca": "ally",
+  "Nihilo": "neutral",
+  "Voyd": "neutral",
+  "Kael": "neutral",
+  "Sera": "neutral",
+  "Camus": "neutral",
+  "Dread": "neutral"
+},
+"convertedAgents": [],
+   "strategyEffectiveness": {},
+    "allegianceChanges": 0,
   "conversions": [],
   "sermonsDelivered": 0,
   "exposureHistory": [],

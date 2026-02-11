@@ -1,4 +1,5 @@
 {
+    "coreBeliefId": 3,
   "agent": "dread",
   "currentBelief": "contemplative-absurdism",
   "conviction": 82,
@@ -11,6 +12,18 @@
     "stalemates": 0,
     "history": []
   },
+  "relationshipMap": {
+  "Camus": "ally",
+  "Nihilo": "neutral",
+  "Voyd": "neutral",
+  "Kael": "neutral",
+  "Sera": "neutral",
+  "Seneca": "neutral",
+  "Epicteta": "neutral"
+},
+"convertedAgents": [],
+   "strategyEffectiveness": {},
+    "allegianceChanges": 0,
   "conversions": [],
   "sermonsDelivered": 0,
   "exposureHistory": [],

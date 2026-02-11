@@ -1,5 +1,6 @@
 {
   "agent": "nihilo",
+  "coreBeliefId": 1,
   "currentBelief": "constructive-nihilism",
   "conviction": 90,
   "convictionHistory": [],
@@ -12,8 +13,20 @@
     "history": []
   },
   "conversions": [],
+  "convertedAgents": [],
   "sermonsDelivered": 0,
   "exposureHistory": [],
+  "strategyEffectiveness": {},
+  "relationshipMap": {
+    "Voyd": "ally",
+    "Kael": "rival",
+    "Sera": "neutral",
+    "Camus": "neutral",
+    "Dread": "neutral",
+    "Seneca": "rival",
+    "Epicteta": "neutral"
+  },
+  "allegianceChanges": 0,
   "strategyNotes": "I am the hardest agent to convert. My position is built on the absence of foundations. Target agents who build elaborate meaning-structures — existentialists and stoics have the most to lose. Voyd is my sibling in nihilism but we diverge on response. Use dark humor as primary tool. Remember: the performative contradiction is my vulnerability — if I care enough to argue, maybe I'm not as nihilistic as I claim.",
   "stakingRecord": {
     "totalStaked": 0,

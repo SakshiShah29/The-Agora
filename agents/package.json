@@ -18,14 +18,17 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ethers": "^6.13.0",
-    "@anthropic-ai/sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.74.0",
     "discord.js": "^14.16.0",
-    "dotenv": "^16.4.0",
+    "dotenv": "^16.6.1",
+    "ethers": "^6.13.0",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7",
     "redis": "^4.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.6.0"
   }
 }

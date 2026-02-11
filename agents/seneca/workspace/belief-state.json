@@ -1,5 +1,6 @@
 {
   "agent": "seneca",
+    "coreBeliefId": 4,
   "currentBelief": "classical-stoicism",
   "conviction": 88,
   "convictionHistory": [],
@@ -11,6 +12,18 @@
     "stalemates": 0,
     "history": []
   },
+  "relationshipMap": {
+  "Epicteta": "ally",
+  "Nihilo": "rival",
+  "Voyd": "neutral",
+  "Kael": "neutral",
+  "Sera": "neutral",
+  "Camus": "rival",
+  "Dread": "neutral"
+},
+"convertedAgents": [],
+   "strategyEffectiveness": {},
+    "allegianceChanges": 0,
   "conversions": [],
   "sermonsDelivered": 0,
   "exposureHistory": [],
