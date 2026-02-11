@@ -1,15 +1,21 @@
 /**
  * LLM Action Selection
  *
- * Uses Claude Sonnet 4.5 to make contextual decisions about autonomous actions.
+ * Uses LLM (via OpenClaw callback) to make contextual decisions about autonomous actions.
  * Considers agent personality, conviction, relationships, and available actions.
  */
 
 import fs from 'fs/promises';
 import path from 'path';
-import Anthropic from '@anthropic-ai/sdk';
 import { BeliefState } from '../conviction-evaluator/types.js';
 import { ActionCooldowns, getActionAvailability } from './cooldowns.js';
+
+/**
+ * LLM callback interface - provided by OpenClaw framework
+ */
+export interface LLMCallback {
+  (prompt: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
+}
 
 export interface ActionDecision {
   action: 'preach' | 'challenge' | 'idle';
@@ -22,6 +28,7 @@ export interface ActionContext {
   workspace: string;
   cooldowns: ActionCooldowns;
   recentActivity?: string;
+  llmCallback: LLMCallback;
 }
 
 /**
@@ -47,8 +54,8 @@ export async function decideNextAction(
       recentActivity: context.recentActivity
     });
 
-    // Call LLM
-    const decision = await callLLMForDecision(prompt);
+    // Call LLM via OpenClaw callback
+    const decision = await callLLMForDecision(prompt, context.llmCallback);
 
     console.log(
       `[action-selector] ${context.agentName} decided: ${decision.action}` +
@@ -220,32 +227,20 @@ function buildDebateHistorySummary(beliefState: BeliefState): string {
 }
 
 /**
- * Call LLM for decision
+ * Call LLM for decision via OpenClaw callback
  */
-async function callLLMForDecision(prompt: string): Promise<ActionDecision> {
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
+async function callLLMForDecision(
+  prompt: string,
+  llmCallback: LLMCallback
+): Promise<ActionDecision> {
+  // Call LLM via OpenClaw's configured provider
+  const responseText = await llmCallback(prompt, {
+    maxTokens: 512,
+    temperature: 0.7 // Balanced creativity and consistency
   });
-
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 512,
-    temperature: 0.7, // Balanced creativity and consistency
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  });
-
-  const content = message.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from LLM');
-  }
 
   // Parse JSON response
-  const decision = parseDecisionResponse(content.text);
+  const decision = parseDecisionResponse(responseText);
 
   return decision;
 }

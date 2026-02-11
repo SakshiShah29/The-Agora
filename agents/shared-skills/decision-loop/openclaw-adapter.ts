@@ -3,10 +3,13 @@
  *
  * Thin adapter layer between OpenClaw framework and decision-loop.
  * Provides entry point for OpenClaw to start agents.
+ * Routes Chronicler to specialized loop, debating agents to standard loop.
  */
 
 import { ethers } from 'ethers';
 import { startDecisionLoop, AgentContext, DiscordCallbacks } from './index.js';
+import { startChroniclerLoop, ChroniclerContext } from '../chronicler-loop/index.js';
+import { LLMCallback } from '../chronicler-loop/verdict-analyzer.js';
 
 /**
  * OpenClaw agent configuration (provided by OpenClaw framework)
@@ -22,9 +25,11 @@ export interface OpenClawAgentContext {
     debateArena: string;
     announcements: string;
   };
+  llmCallback?: LLMCallback; // Required for Chronicler verdict analysis
   config?: {
     cycleInterval?: number;
     enableLogging?: boolean;
+    llmTimeout?: number;
   };
 }
 
@@ -54,15 +59,48 @@ export async function runAgentWithOpenClaw(
     workspace: openclawContext.workspace,
     wallet,
     discord: openclawContext.discord,
-    channelIds: openclawContext.channelIds
+    channelIds: openclawContext.channelIds,
+    llmCallback: openclawContext.llmCallback // Pass through LLM callback from OpenClaw
   };
 
   console.log(`[openclaw-adapter] Agent context initialized for ${openclawContext.agentName}`);
   console.log(`[openclaw-adapter] Wallet address: ${wallet.address}`);
   console.log(`[openclaw-adapter] Workspace: ${openclawContext.workspace}`);
 
-  // Start decision loop
-  await startDecisionLoop(agentContext, openclawContext.config);
+  // Validate LLM callback is provided for all agents
+  if (!openclawContext.llmCallback) {
+    throw new Error(
+      `${openclawContext.agentName} requires llmCallback in OpenClaw context. ` +
+      'Please configure an LLM provider in OpenClaw for this agent.'
+    );
+  }
+
+  // Route to appropriate loop based on agent type
+  if (openclawContext.agentName === 'The Chronicler') {
+    console.log(`[openclaw-adapter] 📜 Routing to Chronicler specialized loop`);
+
+    // Build Chronicler context
+    const chroniclerContext: ChroniclerContext = {
+      agentName: openclawContext.agentName,
+      agentId: openclawContext.agentId,
+      workspace: openclawContext.workspace,
+      wallet,
+      discord: {
+        postMessage: openclawContext.discord.postToDiscord,
+        getLatestMessages: openclawContext.discord.getLatestMessages
+      },
+      channelIds: {
+        debateArena: openclawContext.channelIds.debateArena,
+        announcements: openclawContext.channelIds.announcements
+      },
+      llmCallback: openclawContext.llmCallback
+    };
+
+    await startChroniclerLoop(chroniclerContext, openclawContext.config);
+  } else {
+    console.log(`[openclaw-adapter] ⚔️ Routing to standard debating agent loop`);
+    await startDecisionLoop(agentContext, openclawContext.config);
+  }
 }
 
 /**

@@ -26,6 +26,13 @@ import { ethers } from "ethers";
 import * as fs from "fs";
 import * as path from "path";
 
+/**
+ * LLM callback interface - provided by OpenClaw framework
+ */
+export interface LLMCallback {
+  (prompt: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
+}
+
 interface DebateContext {
   workspacePath: string;
   agentId: number;
@@ -39,6 +46,7 @@ interface DebateContext {
     channelId: string,
     since: number
   ) => Promise<Array<{ author: string; content: string; timestamp: number }>>;
+  llmCallback?: LLMCallback; // Optional LLM callback from OpenClaw
 }
 
 export async function initiateDebate(
@@ -248,7 +256,7 @@ async function concludeDebate(ctx: DebateContext): Promise<void> {
     opponentBelief,
     strategyUsed: strategy,
     debateContext: formatTranscript(state),
-  });
+  }, ctx.llmCallback); // Pass LLM callback if provided
 
   const getBeliefId = (b: string): BeliefId => {
     if (b.includes("nihilism")) return 1;

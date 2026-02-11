@@ -54,6 +54,13 @@ export interface DiscordCallbacks {
 }
 
 /**
+ * LLM callback interface - provided by OpenClaw framework
+ */
+export interface LLMCallback {
+  (prompt: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
+}
+
+/**
  * Agent context for decision loop
  */
 export interface AgentContext {
@@ -67,6 +74,7 @@ export interface AgentContext {
     debateArena: string;
     announcements: string;
   };
+  llmCallback?: LLMCallback; // Optional LLM callback from OpenClaw
 }
 
 /**
@@ -257,7 +265,8 @@ async function handleSpecialStates(
             content: msg.content,
             timestamp: msg.timestamp
           }));
-        }
+        },
+        llmCallback: context.llmCallback
       });
 
       if (debateStatus.status === 'concluded') {
@@ -442,7 +451,8 @@ async function handleReactiveActions(
               content: msg.content,
               timestamp: msg.timestamp
             }));
-          }
+          },
+          llmCallback: context.llmCallback
         },
         {
           debateId: challenge.debateId,
@@ -481,11 +491,18 @@ async function handleAutonomousActions(
 ): Promise<void> {
   console.log(`[decision-loop] ${context.agentName} deciding autonomous action...`);
 
+  // Validate llmCallback is provided
+  if (!context.llmCallback) {
+    console.error(`[decision-loop] No LLM callback provided for ${context.agentName} - cannot make decisions`);
+    return;
+  }
+
   // Get LLM decision
   const decision = await decideNextAction({
     agentName: context.agentName,
     workspace: context.workspace,
-    cooldowns
+    cooldowns,
+    llmCallback: context.llmCallback
   });
 
   console.log(
@@ -608,7 +625,8 @@ async function executeChallenge(
             content: msg.content,
             timestamp: msg.timestamp
           }));
-        }
+        },
+        llmCallback: context.llmCallback
       },
       {
         targetAgentId: targetAgent.agentId,

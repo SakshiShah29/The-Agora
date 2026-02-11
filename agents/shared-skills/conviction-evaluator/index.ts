@@ -1,7 +1,6 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 import { ChainProvider, ContractManager, executeTransaction, callViewFunction } from '../chain-interaction/index.js';
-import Anthropic from "@anthropic-ai/sdk";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -25,6 +24,14 @@ import {
   AGENT_VULNERABILITIES,
 } from "./prompts.js";
 
+/**
+ * LLM callback interface - provided by OpenClaw framework
+ * If not provided, falls back to environment-configured provider
+ */
+export interface LLMCallback {
+  (prompt: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
+}
+
 // ─── Configuration ────────────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || "ollama"; // "ollama" | "gemini" | "claude"
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.1:8b";
@@ -38,7 +45,8 @@ const TEMPERATURE = 0.7;
 
 // ─── Main evaluation function ─────────────────────────────────────
 export async function evaluateConviction(
-  input: ConvictionEvalParams
+  input: ConvictionEvalParams,
+  llmCallback?: LLMCallback
 ): Promise<ConvictionResult> {
   // 1. Extract structured data from SOUL.md
   const coreTenets = extractCoreTenets(input.agentSoulMd);
@@ -67,7 +75,7 @@ export async function evaluateConviction(
   });
 
   // 4. Call the LLM with retries for JSON parse failures
-  const rawResponse = await callLLMWithRetry(prompt);
+  const rawResponse = await callLLMWithRetry(prompt, llmCallback);
 
   // 5. Clamp and validate the delta
   const clampedDelta = clampDelta(rawResponse.delta);
@@ -95,7 +103,16 @@ export async function evaluateConviction(
 }
 
 // ─── LLM call with retry + JSON parsing ───────────────────────────
-async function callLLMWithRetry(prompt: string): Promise<RawEvaluationResponse> {
+async function callLLMWithRetry(
+  prompt: string,
+  llmCallback?: LLMCallback
+): Promise<RawEvaluationResponse> {
+  // If OpenClaw provides a callback, use it (preferred)
+  if (llmCallback) {
+    return callOpenClawLLM(prompt, llmCallback);
+  }
+
+  // Otherwise fall back to environment-configured provider
   switch (LLM_PROVIDER) {
     case "ollama":
       return callOllama(prompt);
@@ -106,6 +123,42 @@ async function callLLMWithRetry(prompt: string): Promise<RawEvaluationResponse> 
     default:
       return callOllama(prompt);
   }
+}
+
+// ─── OpenClaw LLM callback implementation ─────────────────────────
+async function callOpenClawLLM(
+  prompt: string,
+  llmCallback: LLMCallback
+): Promise<RawEvaluationResponse> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const text = await llmCallback(prompt, {
+        maxTokens: 512,
+        temperature: TEMPERATURE
+      });
+
+      return parseEvaluationResponse(text);
+    } catch (error) {
+      console.error(
+        `[conviction-evaluator] OpenClaw LLM attempt ${attempt}/${MAX_RETRIES} failed:`,
+        error instanceof Error ? error.message : error
+      );
+
+      if (attempt === MAX_RETRIES) {
+        console.warn("[conviction-evaluator] All retries failed. Returning zero delta.");
+        return {
+          delta: 0,
+          reasoning: "Evaluation failed — conviction unchanged.",
+          vulnerabilityNotes: "Unable to assess.",
+          strategyEffectiveness: 50,
+        };
+      }
+
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+
+  throw new Error("Unreachable");
 }
 
 async function callOllama(prompt: string): Promise<RawEvaluationResponse> {
@@ -210,8 +263,9 @@ async function callGemini(prompt: string): Promise<RawEvaluationResponse> {
   throw new Error("Unreachable");
 }
 
-// ─── Claude implementation (production) ───────────────────────────
+// ─── Claude implementation (fallback only) ────────────────────────
 async function callClaude(prompt: string): Promise<RawEvaluationResponse> {
+  // Dynamic import to avoid requiring @anthropic-ai/sdk when using OpenClaw
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const client = new Anthropic();
 
@@ -225,8 +279,8 @@ async function callClaude(prompt: string): Promise<RawEvaluationResponse> {
       });
 
       const text = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
+        .filter((block: any) => block.type === "text")
+        .map((block: any) => block.text)
         .join("");
 
       return parseEvaluationResponse(text);
