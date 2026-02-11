@@ -1,5 +1,6 @@
 import * as dotenv from "dotenv";
 dotenv.config();
+import { ChainProvider, ContractManager, executeTransaction, callViewFunction } from '../chain-interaction/index.js';
 import Anthropic from "@anthropic-ai/sdk";
 import * as fs from "fs";
 import * as path from "path";
@@ -301,13 +302,17 @@ function clampDelta(rawDelta: number): number {
 
 // ─── Post-evaluation state update ─────────────────────────────────
 export async function applyConvictionResult(
-  workspacePath: string,
+   workspacePath: string,
   result: ConvictionResult,
   opponentInfo: {
     agentName: string;
     belief: string;
     strategy: StrategyType;
     beliefId: BeliefId;
+  },
+  chainConfig?: {
+    privateKey: string;
+    agentId: number;
   }
 ): Promise<BeliefState> {
   const statePath = path.join(workspacePath, "belief-state.json");
@@ -339,7 +344,7 @@ export async function applyConvictionResult(
   }
   state.strategyEffectiveness[opponentInfo.strategy].attempts += 1;
 
-  // 5. Handle conversion (using YOUR threshold field!)
+  // 5. Handle conversion
   if (result.newConviction < state.conversionThreshold) {
     state.strategyEffectiveness[opponentInfo.strategy].conversions += 1;
 
@@ -347,15 +352,47 @@ export async function applyConvictionResult(
       state.convertedAgents.push(opponentInfo.agentName);
     }
 
-    // Track previous belief
     if (!state.conversions.includes(state.currentBelief)) {
       state.conversions.push(state.currentBelief);
     }
 
-    // Switch belief
+    // Lifecycle tracking
+    state.currentStakedBeliefId = opponentInfo.beliefId;
+    state.conversionCount = (state.conversionCount ?? 0) + 1;
+    state.lastConversionTime = Date.now();
+
+    // Blockchain sync: migrate stake to new belief
+    if (chainConfig && state.hasEnteredAgora && state.isCurrentlyStaked) {
+      try {
+        console.log(
+          `[conviction-evaluator] 🔗 Migrating stake on-chain: belief ${state.coreBeliefId} → ${opponentInfo.beliefId}`
+        );
+
+        const provider = new ChainProvider();
+        const wallet = await provider.getWallet(chainConfig.privateKey);
+        const contractManager = new ContractManager();
+        const beliefPool = contractManager.getBeliefPool(wallet);
+
+        const migrateTx = await executeTransaction(
+          beliefPool,
+          'migrateStake',
+          [state.coreBeliefId, opponentInfo.beliefId, chainConfig.agentId]
+        );
+
+        console.log(`[conviction-evaluator] ✅ Stake migrated on-chain: ${migrateTx.txHash}`);
+      } catch (error) {
+        console.error(`[conviction-evaluator] ❌ Chain migration failed:`, error);
+      }
+    } else if (process.env.MOCK_CHAIN === "true") {
+      console.log(
+        `[conviction-evaluator] MOCK: migrateStake(${state.coreBeliefId}, ${opponentInfo.beliefId}, ${chainConfig?.agentId})`
+      );
+    }
+
+    // Switch belief in local state
     state.coreBeliefId = opponentInfo.beliefId;
     state.currentBelief = opponentInfo.belief;
-    state.conviction = state.postConversionConviction; // Use YOUR field
+    state.conviction = state.postConversionConviction;
     state.allegianceChanges += 1;
     state.relationshipMap[opponentInfo.agentName] = "ally";
 

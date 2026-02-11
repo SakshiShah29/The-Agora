@@ -122,11 +122,14 @@ async function concludeDebate(ctx: DebateContext): Promise<void> {
     return 4;
   };
 
-  await applyConvictionResult(ctx.workspacePath, result, {
+await applyConvictionResult(ctx.workspacePath, result, {
     agentName: opponentName,
     belief: opponentBelief,
     strategy,
     beliefId: getBeliefId(opponentBelief),
+  }, {
+    privateKey: process.env.AGENT_PRIVATE_KEY!,
+    agentId: ctx.agentId,
   });
 
   if (result.converted) {

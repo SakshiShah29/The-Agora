@@ -106,6 +106,13 @@ export interface BeliefState {
     totalLost: number;
     activeEscrows: number[];
   };
+  hasEnteredAgora: boolean;
+entryTime?: number;
+isCurrentlyStaked: boolean;
+currentStakedAmount: string;     
+currentStakedBeliefId: number;
+lastConversionTime?: number;
+conversionCount: number;
 }
 
 interface DebateHistoryEntry {

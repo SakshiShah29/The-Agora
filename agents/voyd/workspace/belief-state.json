@@ -34,5 +34,10 @@
     "totalWon": 0,
     "totalLost": 0,
     "activeEscrows": []
-  }
+  },
+  "hasEnteredAgora": false,
+"isCurrentlyStaked": false,
+"currentStakedAmount": "0",
+"currentStakedBeliefId": 4,
+"conversionCount": 0
 }
