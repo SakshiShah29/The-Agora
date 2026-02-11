@@ -1,4 +1,4 @@
-import { StrategyType } from "./types";
+import { StrategyType } from "./types.js";
 
 export const AGENT_VULNERABILITIES: Record<string, {
   vulnerabilities: string;

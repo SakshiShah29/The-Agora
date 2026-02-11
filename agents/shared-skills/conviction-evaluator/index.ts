@@ -17,12 +17,12 @@ import {
   SERMON_DELTA_MULTIPLIER,
   BELIEF_SYSTEMS,
   BeliefId,
-} from "./types";
+} from "./types.js";
 import {
   buildEvaluationPrompt,
   extractCoreTenets,
   AGENT_VULNERABILITIES,
-} from "./prompts";
+} from "./prompts.js";
 
 // ─── Configuration ────────────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || "ollama"; // "ollama" | "gemini" | "claude"
