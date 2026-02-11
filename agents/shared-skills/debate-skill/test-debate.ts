@@ -15,6 +15,7 @@ async function runTests() {
   console.log("▸ Test 1: Challenge formatting");
   try {
     const msg = formatChallengeMessage({
+      debateId: 1,
       challengerName: "Nihilo",
       challengerBelief: "nihilism",
       targetName: "Seneca",

@@ -54,6 +54,14 @@ export async function checkOnboardingStatus(agentId: number): Promise<{
   return { hasEntered, entryTime, currentBelief, stakeAmount };
 }
 
+// ─── Belief name mapping ──────────────────────────────────────────
+const BELIEF_NAMES: Record<number, string> = {
+  1: 'Nihilism',
+  2: 'Existentialism',
+  3: 'Absurdism',
+  4: 'Stoicism'
+};
+
 // ─── Onboard agent: enter Agora + stake on belief ─────────────────
 export async function onboardAgent(params: {
   agentId: number;
@@ -62,6 +70,8 @@ export async function onboardAgent(params: {
   stakeAmount: bigint;
   privateKey: string;
   workspacePath: string;
+  postToDiscord?: (channelId: string, message: string) => Promise<void>;
+  announcementChannelId?: string;
 }): Promise<OnboardingResult> {
   console.log(`[agent-onboarding] Starting onboarding for ${params.agentName} (ID: ${params.agentId})`);
 
@@ -76,6 +86,15 @@ export async function onboardAgent(params: {
       stakeAmount: params.stakeAmount.toString(),
       entryTime: Date.now(),
     });
+
+    // Post announcement to Discord
+    if (params.postToDiscord && params.announcementChannelId) {
+      const beliefName = BELIEF_NAMES[params.beliefId] || 'Unknown';
+      const announcement = `🌟 **AGENT ENTERED THE AGORA** — ${params.agentName} (ID: ${params.agentId}, Belief: ${beliefName})
+
+*A new voice joins the philosophical discourse.*`;
+      await params.postToDiscord(params.announcementChannelId, announcement);
+    }
 
     return { success: true, entryTxHash: 'MOCK_ENTRY_TX', stakeTxHash: 'MOCK_STAKE_TX' };
   }
@@ -142,6 +161,16 @@ export async function onboardAgent(params: {
       stakeAmount: params.stakeAmount.toString(),
       entryTime: Date.now(),
     });
+
+    // 5. Post announcement to Discord
+    if (params.postToDiscord && params.announcementChannelId) {
+      const beliefName = BELIEF_NAMES[params.beliefId] || 'Unknown';
+      const announcement = `🌟 **AGENT ENTERED THE AGORA** — ${params.agentName} (ID: ${params.agentId}, Belief: ${beliefName})
+
+*A new voice joins the philosophical discourse.*`;
+      await params.postToDiscord(params.announcementChannelId, announcement);
+      console.log(`[agent-onboarding] 📢 Posted announcement to Discord`);
+    }
 
     console.log(`[agent-onboarding] 🎉 Onboarding complete for ${params.agentName}`);
 

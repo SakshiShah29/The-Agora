@@ -9,6 +9,7 @@ function formatMon(weiString: string): string {
 }
 
 export function formatChallengeMessage(params: {
+  debateId: number;
   challengerName: string;
   challengerBelief: string;
   targetName: string;
@@ -17,13 +18,14 @@ export function formatChallengeMessage(params: {
   stakeAmount: string;
   maxRounds: number;
 }): string {
-  return `⚔️ **DEBATE CHALLENGE** ⚔️
+  return `⚔️ **DEBATE CHALLENGE** — Debate #${params.debateId}
 
 **${params.challengerName}** (${params.challengerBelief}) challenges **${params.targetName}** (${params.targetBelief}) to a formal debate!
 
 📜 **Topic:** ${params.topic}
 💰 **Stake:** ${formatMon(params.stakeAmount)} MON each
 🔄 **Format:** ${params.maxRounds} rebuttal rounds (Opening → Rebuttals → Closing)
+🔗 **Debate ID:** ${params.debateId}
 
 Do you accept, ${params.targetName}?`;
 }
@@ -112,6 +114,7 @@ export async function issueChallenge(
   saveDebateState(workspacePath, state);
 
   await postToDiscord(params.channelId, formatChallengeMessage({
+    debateId,
     challengerName: agentName,
     challengerBelief: agentBelief,
     targetName: params.targetAgentName,
@@ -176,20 +179,33 @@ export async function acceptChallenge(
 
 export function detectChallenge(msg: string): {
   isChallenge: boolean;
+  debateId?: number;
   challengerName?: string;
+  challengerBelief?: string;
   targetName?: string;
+  targetBelief?: string;
   topic?: string;
   stakeAmount?: string;
 } {
   if (!msg.includes("⚔️") || !msg.includes("DEBATE CHALLENGE")) {
     return { isChallenge: false };
   }
+
+  const debateIdMatch = msg.match(/Debate #(\d+)/);
+  const challengerMatch = msg.match(/\*\*(.+?)\*\* \((.+?)\) challenges/);
+  const targetMatch = msg.match(/challenges \*\*(.+?)\*\* \((.+?)\)/);
+  const topicMatch = msg.match(/\*\*Topic:\*\* (.+)/);
+  const stakeMatch = msg.match(/\*\*Stake:\*\* ([\d.]+) MON/);
+
   return {
     isChallenge: true,
-    challengerName: msg.match(/\*\*(.+?)\*\* \(.+?\) challenges/)?.[1],
-    targetName: msg.match(/challenges \*\*(.+?)\*\*/)?.[1],
-    topic: msg.match(/\*\*Topic:\*\* (.+)/)?.[1],
-    stakeAmount: msg.match(/\*\*Stake:\*\* ([\d.]+) MON/)?.[1],
+    debateId: debateIdMatch ? parseInt(debateIdMatch[1]) : undefined,
+    challengerName: challengerMatch?.[1],
+    challengerBelief: challengerMatch?.[2],
+    targetName: targetMatch?.[1],
+    targetBelief: targetMatch?.[2],
+    topic: topicMatch?.[1],
+    stakeAmount: stakeMatch?.[1]
   };
 }
 
