@@ -109,12 +109,11 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         stalematePenaltyBps = _stalematePenaltyBps;
         convictionMultiplierPeriod = _convictionMultiplierPeriod;
 
-        // Initialize the 5 fixed beliefs
+        // Initialize the 4 fixed beliefs
         beliefs[1] = BeliefPosition(1, "Nihilism", keccak256("ipfs://nihilism"), 0, 0);
         beliefs[2] = BeliefPosition(2, "Existentialism", keccak256("ipfs://existentialism"), 0, 0);
         beliefs[3] = BeliefPosition(3, "Absurdism", keccak256("ipfs://absurdism"), 0, 0);
         beliefs[4] = BeliefPosition(4, "Stoicism", keccak256("ipfs://stoicism"), 0, 0);
-        beliefs[5] = BeliefPosition(5, "Hedonism", keccak256("ipfs://hedonism"), 0, 0);
 
         nextDebateId = 1;
     }
@@ -122,10 +121,10 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     // ========== STAKING FUNCTIONS ==========
 
     /**
-     * @notice Stake on one of the 5 fixed beliefs
+     * @notice Stake on one of the 4 fixed beliefs
      */
     function stake(uint256 beliefId, uint256 agentId) external payable {
-        require(beliefId >= 1 && beliefId <= 5, "Invalid belief");
+        require(beliefId >= 1 && beliefId <= 4, "Invalid belief");
         require(msg.value >= MIN_STAKE_AMOUNT, "Stake too low");
         _verifyAgentOwnership(agentId);
 
