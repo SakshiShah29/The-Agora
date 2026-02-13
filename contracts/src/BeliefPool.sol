@@ -32,7 +32,8 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         Pending,           // Waiting for Agent B to match
         Active,            // Both staked, awaiting Chronicler verdict
         SettledWinner,     // Winner paid
-        SettledStalemate   // Penalties applied, stakes returned
+        SettledStalemate,   // Penalties applied, stakes returned
+        Cancelled          // Debate cancelled by Agent A (before match)
     }
 
     struct DebateEscrow {
@@ -292,6 +293,21 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         debate.status = DebateStatus.Active;
 
         emit DebateEscrowMatched(debateId, debate.agentBId);
+    }
+
+    function declineDebateEscrow(uint256 debateId) external nonReentrant {
+        DebateEscrow storage debate = debates[debateId];
+        require(debate.status == DebateStatus.Pending, "Not pending");
+        require(msg.sender == _getAgentWallet(debate.agentBId), "Not agent B");
+
+        debate.status = DebateStatus.Cancelled; // Mark as settled to prevent reuse
+
+        // Refund Agent A
+        address walletA = _getAgentWallet(debate.agentAId);
+        (bool successA, ) = walletA.call{value: debate.stakeAmount}("");
+        require(successA, "Refund failed");
+
+        emit DebateSettled(debateId, 0, 0, "cancelled");
     }
 
     // ========== CHRONICLER VERDICT (ATOMIC SETTLEMENT) ==========

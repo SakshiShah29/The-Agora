@@ -280,7 +280,6 @@ contract DeployLocal is Script {
 
         // Deployment
         json = string.concat(json, '"deployment":{');
-        json = string.concat(json, '"timestamp":', vm.toString(block.timestamp), ',');
         json = string.concat(json, '"version":"3.0-local"');
         json = string.concat(json, '},');
 
