@@ -642,11 +642,11 @@ export function createDebateRouter(db: Db, deps: DebateRouterDeps): Router {
         const POST_DEBATE_COOLDOWN = 4;
         await db.collection("beliefStates").updateOne(
           { agentId: debate.challengerId },
-          { $set: { inDebate: false, challengeCooldown: POST_DEBATE_COOLDOWN, postOnboardPreaches: 0 } }
+          { $set: { inDebate: false, challengeCooldown: POST_DEBATE_COOLDOWN, postOnboardPreaches: 0, awaitingVerdict: true } }
         );
         await db.collection("beliefStates").updateOne(
           { agentId: debate.challengedId },
-          { $set: { inDebate: false, challengeCooldown: POST_DEBATE_COOLDOWN, postOnboardPreaches: 0 } }
+          { $set: { inDebate: false, challengeCooldown: POST_DEBATE_COOLDOWN, postOnboardPreaches: 0, awaitingVerdict: true } }
         );
         console.log(`[${ts()}]    debate ${debate.debateId}: 🏁 CONCLUDED after ${newTurnIndex} turns`);
         console.log(`[${ts()}]    cooldown=${POST_DEBATE_COOLDOWN} for both, preaches reset`);

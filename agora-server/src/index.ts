@@ -12,6 +12,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 import { createDebateRouter } from "./routes/debate";
+import { createChroniclerRouter } from "./routes/chronicler";
 
 dotenv.config();
 
@@ -324,9 +325,10 @@ app.get("/api/agents/:id/state", async (req, res) => {
       activeDebate,
       pendingChallenge,
       othersDebating,
+      awaitingVerdict: clean.awaitingVerdict || false,
     };
 
-    console.log(`[${ts()}]    agent ${agentId}: entered=${response.hasEnteredAgora} staked=${response.isCurrentlyStaked} sermons=${response.sermonsDelivered}/3 preaches=${totalPreaches} cooldown=${challengeCooldown} debating=${isActiveDebateParticipant} othersDebating=${othersDebating}`);
+    console.log(`[${ts()}]    agent ${agentId}: entered=${response.hasEnteredAgora} staked=${response.isCurrentlyStaked} sermons=${response.sermonsDelivered}/3 preaches=${totalPreaches} cooldown=${challengeCooldown} debating=${isActiveDebateParticipant} othersDebating=${othersDebating} awaitingVerdict=${response.awaitingVerdict}`);
     res.json(response);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -581,6 +583,14 @@ async function main() {
   });
   app.use(debateRouter);
 
+  // Mount chronicler router (needs db + viem clients for on-chain verdict)
+  const chroniclerRouter = createChroniclerRouter(db, {
+    publicClient,
+    getWalletClient,
+    BELIEF_POOL,
+  });
+  app.use(chroniclerRouter);
+
   app.listen(PORT, () => {
     console.log(`\n${"═".repeat(60)}`);
     console.log(`  AGORA SERVER — http://127.0.0.1:${PORT}`);
@@ -602,6 +612,8 @@ async function main() {
     console.log(`    POST /api/agents/:id/debate/accept`);
     console.log(`    POST /api/agents/:id/debate/decline`);
     console.log(`    POST /api/agents/:id/debate/argue`);
+    console.log(`    GET  /api/chronicler/pending-verdict`);
+    console.log(`    POST /api/chronicler/submit-verdict`);
     console.log(`${"═".repeat(60)}`);
     console.log(`  Waiting for agent requests...\n`);
   });
