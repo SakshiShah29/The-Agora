@@ -392,18 +392,18 @@ app.post("/api/agents/:id/sermon", async (req, res) => {
     console.log(`[${ts()}]    agent ${agentId}: current sermons=${state.sermonsDelivered}/3, lastAt=${state.lastSermonAt || "never"}`);
 
     // Check cooldown (10 min)
-    if (state.lastSermonAt) {
-      const elapsed = Date.now() - new Date(state.lastSermonAt).getTime();
-      if (elapsed < 10 * 60 * 1000) {
-        const waitSec = Math.ceil((10 * 60 * 1000 - elapsed) / 1000);
-        console.log(`[${ts()}]    agent ${agentId}: ⏳ cooldown active, ${waitSec}s remaining`);
-        return res.status(429).json({
-          error: "cooldown",
-          message: `Wait ${waitSec}s before next sermon`,
-          waitSeconds: waitSec,
-        });
-      }
-    }
+    //if (state.lastSermonAt) {
+    //  const elapsed = Date.now() - new Date(state.lastSermonAt).getTime();
+    //  if (elapsed < 10 * 60 * 1000) {
+    //    const waitSec = Math.ceil((10 * 60 * 1000 - elapsed) / 1000);
+    //    console.log(`[${ts()}]    agent ${agentId}: ⏳ cooldown active, ${waitSec}s remaining`);
+    //    return res.status(429).json({
+    //      error: "cooldown",
+    //      message: `Wait ${waitSec}s before next sermon`,
+    //      waitSeconds: waitSec,
+    //    });
+    //  }
+    //}
 
     // Check max sermons
     if (state.sermonsDelivered >= 3) {
