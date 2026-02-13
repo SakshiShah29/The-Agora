@@ -11,6 +11,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
+import { createDebateRouter } from "./routes/debate";
 
 dotenv.config();
 
@@ -159,15 +160,19 @@ async function connectMongo() {
 const AGENT_DEFAULTS: Record<string, any> = {
   "6": {
     agent: "seneca",
+    agentName: "Seneca",
     agentId: 6,
     coreBeliefId: 4,
+    beliefName: "classical-stoicism",
     currentBelief: "classical-stoicism",
     conviction: 88,
   },
   "5": {
     agent: "nihilo",
+    agentName: "Nihilo",
     agentId: 5,
     coreBeliefId: 1,
+    beliefName: "constructive-nihilism",
     currentBelief: "constructive-nihilism",
     conviction: 85,
   },
@@ -180,18 +185,41 @@ function defaultState(agentId: string) {
     ...base,
     hasEnteredAgora: false,
     isCurrentlyStaked: false,
+    arrivalAnnounced: false,
     sermonsDelivered: 0,
     lastSermonAt: null,
+    postOnboardPreaches: 0,
+    lastPreachAt: null,
+    challengeCooldown: 0,
+    inDebate: false,
   };
+}
+
+// ─── Agent info for debate overlay ───────────────────────────────────────────
+
+const AGENT_INFO: Record<number, { name: string; belief: string; beliefId: number }> = {
+  5: { name: "Nihilo", belief: "constructive-nihilism", beliefId: 1 },
+  6: { name: "Seneca", belief: "classical-stoicism", beliefId: 4 },
+};
+
+// ─── Debate phase helpers (shared with routes/debate.ts) ─────────────────────
+
+const DEBATE_PHASES = ["OPENING", "ROUND_1", "ROUND_2", "ROUND_3", "CLOSING"] as const;
+
+function getPhaseAndRole(turnIndex: number) {
+  const phaseIndex = Math.floor(turnIndex / 2);
+  const role = turnIndex % 2 === 0 ? "challenger" : "challenged";
+  return { phase: DEBATE_PHASES[phaseIndex], role };
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-// GET /api/agents/:id/state — read belief state from MongoDB
+// GET /api/agents/:id/state — read belief state from MongoDB + debate overlay
 app.get("/api/agents/:id/state", async (req, res) => {
   try {
     const agentId = req.params.id;
-    let state = await db.collection("beliefStates").findOne({ agentId: parseInt(agentId) });
+    const agentIdNum = parseInt(agentId);
+    let state = await db.collection("beliefStates").findOne({ agentId: agentIdNum });
     if (!state) {
       console.log(`[${ts()}]    agent ${agentId}: no state found, initializing defaults`);
       const def = defaultState(agentId);
@@ -199,22 +227,119 @@ app.get("/api/agents/:id/state", async (req, res) => {
       state = def;
     }
     const { _id, ...clean } = state as any;
-    console.log(`[${ts()}]    agent ${agentId}: entered=${clean.hasEnteredAgora} staked=${clean.isCurrentlyStaked} sermons=${clean.sermonsDelivered}/3`);
-    res.json(clean);
+
+    // ─── Debate overlay: compute debate-related fields ────────────────────
+    const totalPreaches = (clean.sermonsDelivered || 0) + (clean.postOnboardPreaches || 0);
+    const challengeCooldown = clean.challengeCooldown || 0;
+
+    // Check for active debate involving this agent
+    const myDebate = await db.collection("debates").findOne({
+      status: { $in: ["waiting_acceptance", "active"] },
+      $or: [{ challengerId: agentIdNum }, { challengedId: agentIdNum }],
+    });
+
+    // Check for ANY active debate (for othersDebating)
+    const anyDebate = await db.collection("debates").findOne({
+      status: { $in: ["waiting_acceptance", "active"] },
+    });
+
+    let isActiveDebateParticipant = false;
+    let activeDebate = null;
+    let pendingChallenge = null;
+    let othersDebating = false;
+
+    if (myDebate) {
+      const iAmChallenger = myDebate.challengerId === agentIdNum;
+      const myRole = iAmChallenger ? "challenger" : "challenged";
+      const opponentId = iAmChallenger ? myDebate.challengedId : myDebate.challengerId;
+      const opponentInfo = AGENT_INFO[opponentId];
+
+      if (myDebate.status === "waiting_acceptance") {
+        if (iAmChallenger) {
+          // I issued the challenge, waiting for opponent to accept
+          isActiveDebateParticipant = true;
+          activeDebate = {
+            debateId: myDebate.debateId,
+            phase: "WAITING_ACCEPTANCE",
+            myTurn: false,
+            myRole,
+            opponentName: opponentInfo?.name || `Agent ${opponentId}`,
+            opponentId,
+            opponentBelief: opponentInfo?.belief || "unknown",
+            topic: myDebate.topic,
+            stakeAmount: "0.001",
+            channelId: "1470722825068216433",
+            transcript: myDebate.transcript || [],
+          };
+        } else {
+          // I was challenged — show pendingChallenge
+          const challengerInfo = AGENT_INFO[myDebate.challengerId];
+          pendingChallenge = {
+            debateId: myDebate.debateId,
+            challengerName: challengerInfo?.name || `Agent ${myDebate.challengerId}`,
+            challengerId: myDebate.challengerId,
+            challengerBelief: challengerInfo?.belief || "unknown",
+            topic: myDebate.topic,
+            stakeAmount: "0.001",
+            channelId: "1470722825068216433",
+          };
+        }
+      } else if (myDebate.status === "active") {
+        isActiveDebateParticipant = true;
+        const { phase, role: expectedRole } = getPhaseAndRole(myDebate.turnIndex);
+        const myTurn = expectedRole === myRole;
+
+        activeDebate = {
+          debateId: myDebate.debateId,
+          phase,
+          myTurn,
+          myRole,
+          opponentName: opponentInfo?.name || `Agent ${opponentId}`,
+          opponentId,
+          opponentBelief: opponentInfo?.belief || "unknown",
+          topic: myDebate.topic,
+          stakeAmount: "0.001",
+          channelId: "1470722825068216433",
+          transcript: myDebate.transcript || [],
+        };
+      }
+    } else if (anyDebate) {
+      // There's a debate but I'm not in it
+      othersDebating = true;
+    }
+
+    // Build final response
+    const response = {
+      agentId: clean.agentId,
+      agentName: clean.agentName || AGENT_DEFAULTS[agentId]?.agentName,
+      beliefId: clean.coreBeliefId,
+      beliefName: clean.beliefName || clean.currentBelief,
+      hasEnteredAgora: clean.hasEnteredAgora || false,
+      isCurrentlyStaked: clean.isCurrentlyStaked || false,
+      arrivalAnnounced: clean.arrivalAnnounced || false,
+      sermonsDelivered: clean.sermonsDelivered || 0,
+      totalPreaches,
+      challengeCooldown,
+      isActiveDebateParticipant,
+      activeDebate,
+      pendingChallenge,
+      othersDebating,
+    };
+
+    console.log(`[${ts()}]    agent ${agentId}: entered=${response.hasEnteredAgora} staked=${response.isCurrentlyStaked} sermons=${response.sermonsDelivered}/3 preaches=${totalPreaches} cooldown=${challengeCooldown} debating=${isActiveDebateParticipant} othersDebating=${othersDebating}`);
+    res.json(response);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/agents/:id/enter — enter The Agora (on-chain)
-// Mirrors: onboardAgent() → agoraGate.enter(agentId) { value: entryFee }
 app.post("/api/agents/:id/enter", async (req, res) => {
   try {
     const agentId = req.params.id;
     const agentIdBn = BigInt(agentId);
     console.log(`[${ts()}]    agent ${agentId}: checking on-chain entry status...`);
 
-    // 1. Check if already entered
     const hasEntered = await publicClient.readContract({
       address: AGORA_GATE,
       abi: AGORA_GATE_ABI,
@@ -239,7 +364,6 @@ app.post("/api/agents/:id/enter", async (req, res) => {
       return res.json({ status: "already_entered", entryTime: Number(entryTime) });
     }
 
-    // 2. Get entry fee
     const entryFee = await publicClient.readContract({
       address: AGORA_GATE,
       abi: AGORA_GATE_ABI,
@@ -247,7 +371,6 @@ app.post("/api/agents/:id/enter", async (req, res) => {
     });
     console.log(`[${ts()}]    agent ${agentId}: entry fee = ${formatEther(entryFee)} ETH`);
 
-    // 3. Enter
     console.log(`[${ts()}]    agent ${agentId}: sending enter() tx...`);
     const walletClient = getWalletClient(agentId);
     const txHash = await walletClient.writeContract({
@@ -259,11 +382,9 @@ app.post("/api/agents/:id/enter", async (req, res) => {
     });
     console.log(`[${ts()}]    agent ${agentId}: tx sent: ${txHash}`);
 
-    // 4. Wait for confirmation
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     console.log(`[${ts()}]    agent ${agentId}: ✅ tx confirmed block=${receipt.blockNumber} gas=${receipt.gasUsed}`);
 
-    // 5. Update DB
     await db.collection("beliefStates").updateOne(
       { agentId: parseInt(agentId) },
       { $set: { hasEnteredAgora: true, entryTime: Date.now() } },
@@ -288,8 +409,6 @@ app.post("/api/agents/:id/enter", async (req, res) => {
 });
 
 // POST /api/agents/:id/stake — stake on belief (on-chain)
-// Mirrors: onboardAgent() → beliefPool.stake(beliefId, agentId) { value: stakeAmount }
-// IMPORTANT: args order is [beliefId, agentId] — belief FIRST
 app.post("/api/agents/:id/stake", async (req, res) => {
   try {
     const agentId = req.params.id;
@@ -299,10 +418,9 @@ app.post("/api/agents/:id/stake", async (req, res) => {
 
     const beliefId = state.coreBeliefId;
     const beliefIdBn = BigInt(beliefId);
-    const stakeAmount = parseEther("0.1"); // 100000000000000000 wei
+    const stakeAmount = parseEther("0.1");
     console.log(`[${ts()}]    agent ${agentId}: checking existing stake for belief ${beliefId}...`);
 
-    // Check if already staked
     try {
       const [amount] = await publicClient.readContract({
         address: BELIEF_POOL,
@@ -330,12 +448,11 @@ app.post("/api/agents/:id/stake", async (req, res) => {
         });
       }
     } catch {
-      console.log(`[${ts()}]    agent ${agentId}: no existing stake found (getStakeInfo reverted), proceeding`);
+      console.log(`[${ts()}]    agent ${agentId}: no existing stake found, proceeding`);
     }
 
     console.log(`[${ts()}]    agent ${agentId}: sending stake(${beliefId}, ${agentId}) with ${formatEther(stakeAmount)} ETH...`);
 
-    // Stake: beliefPool.stake(beliefId, agentId) { value: stakeAmount }
     const walletClient = getWalletClient(agentId);
     const txHash = await walletClient.writeContract({
       address: BELIEF_POOL,
@@ -349,7 +466,6 @@ app.post("/api/agents/:id/stake", async (req, res) => {
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     console.log(`[${ts()}]    agent ${agentId}: ✅ stake confirmed block=${receipt.blockNumber} gas=${receipt.gasUsed}`);
 
-    // Update DB
     await db.collection("beliefStates").updateOne(
       { agentId: parseInt(agentId) },
       {
@@ -389,23 +505,8 @@ app.post("/api/agents/:id/sermon", async (req, res) => {
     const state = await db.collection("beliefStates").findOne({ agentId: parseInt(agentId) });
     if (!state) return res.status(404).json({ error: "Agent not found" });
 
-    console.log(`[${ts()}]    agent ${agentId}: current sermons=${state.sermonsDelivered}/3, lastAt=${state.lastSermonAt || "never"}`);
+    console.log(`[${ts()}]    agent ${agentId}: current sermons=${state.sermonsDelivered}/3`);
 
-    // Check cooldown (10 min)
-    //if (state.lastSermonAt) {
-    //  const elapsed = Date.now() - new Date(state.lastSermonAt).getTime();
-    //  if (elapsed < 10 * 60 * 1000) {
-    //    const waitSec = Math.ceil((10 * 60 * 1000 - elapsed) / 1000);
-    //    console.log(`[${ts()}]    agent ${agentId}: ⏳ cooldown active, ${waitSec}s remaining`);
-    //    return res.status(429).json({
-    //      error: "cooldown",
-    //      message: `Wait ${waitSec}s before next sermon`,
-    //      waitSeconds: waitSec,
-    //    });
-    //  }
-    //}
-
-    // Check max sermons
     if (state.sermonsDelivered >= 3) {
       console.log(`[${ts()}]    agent ${agentId}: already delivered 3 sermons, onboarding complete`);
       return res.json({ status: "complete", sermonsDelivered: 3 });
@@ -419,7 +520,6 @@ app.post("/api/agents/:id/sermon", async (req, res) => {
       { $set: { sermonsDelivered: newCount, lastSermonAt: now } }
     );
 
-    // Determine sermon type
     const sermonTypes: Record<number, string> = { 1: "SCRIPTURE", 2: "PARABLE", 3: "EXHORTATION" };
     const sermonType = sermonTypes[newCount] || "SCRIPTURE";
 
@@ -457,10 +557,30 @@ app.put("/api/agents/:id/state", async (req, res) => {
   }
 });
 
+// ─── Mount debate routes ─────────────────────────────────────────────────────
+// NOTE: The debate router handles:
+//   POST /api/agents/:id/preach
+//   POST /api/agents/:id/debate/challenge
+//   POST /api/agents/:id/debate/accept
+//   POST /api/agents/:id/debate/decline
+//   POST /api/agents/:id/debate/argue
+
+// We register it AFTER existing routes so it doesn't interfere.
+// The GET /state debate overlay is built directly into the GET route above.
+
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 async function main() {
   await connectMongo();
+
+  // Mount debate router (needs db + viem clients for on-chain calls)
+  const debateRouter = createDebateRouter(db, {
+    publicClient,
+    getWalletClient,
+    BELIEF_POOL,
+  });
+  app.use(debateRouter);
+
   app.listen(PORT, () => {
     console.log(`\n${"═".repeat(60)}`);
     console.log(`  AGORA SERVER — http://127.0.0.1:${PORT}`);
@@ -470,6 +590,18 @@ async function main() {
     console.log(`  Mongo:  ${process.env.MONGO_URI}/${process.env.MONGO_DB}`);
     console.log(`  Gate:   ${AGORA_GATE}`);
     console.log(`  Pool:   ${BELIEF_POOL}`);
+    console.log(`${"═".repeat(60)}`);
+    console.log(`  Endpoints:`);
+    console.log(`    GET  /api/agents/:id/state`);
+    console.log(`    POST /api/agents/:id/enter`);
+    console.log(`    POST /api/agents/:id/stake`);
+    console.log(`    PUT  /api/agents/:id/state`);
+    console.log(`    POST /api/agents/:id/sermon`);
+    console.log(`    POST /api/agents/:id/preach`);
+    console.log(`    POST /api/agents/:id/debate/challenge`);
+    console.log(`    POST /api/agents/:id/debate/accept`);
+    console.log(`    POST /api/agents/:id/debate/decline`);
+    console.log(`    POST /api/agents/:id/debate/argue`);
     console.log(`${"═".repeat(60)}`);
     console.log(`  Waiting for agent requests...\n`);
   });
