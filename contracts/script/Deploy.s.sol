@@ -13,11 +13,10 @@ import "../src/AgoraGate.sol";
 contract Deploy is Script {
     // ERC-8004 Registry addresses on Monad testnet
     address constant IDENTITY_REGISTRY = 0x8004A818BFB912233c491871b3d84c89A494BD9e;
-    address constant REPUTATION_REGISTRY = 0x8004B663056A597Dffe9eCcC1965A193B7388713;
 
     // Configuration
     uint256 constant STALEMATE_PENALTY_BPS = 1000;  // 10%
-    uint256 constant CONVICTION_MULTIPLIER_PERIOD = 30 days;
+    uint256 constant DEBATE_DIVIDEND_BPS = 1000;     // 10%
     uint256 constant ENTRY_FEE = 0.01 ether;
 
     function run() external {
@@ -37,7 +36,7 @@ contract Deploy is Script {
         BeliefPool beliefPool = new BeliefPool(
             IDENTITY_REGISTRY,
             STALEMATE_PENALTY_BPS,
-            CONVICTION_MULTIPLIER_PERIOD
+            DEBATE_DIVIDEND_BPS
         );
         console.log("BeliefPool deployed:", address(beliefPool));
 
@@ -128,9 +127,8 @@ contract Deploy is Script {
         json = string.concat(json, '"configuration":{');
         json = string.concat(json, '"chroniclerAddress":"', vm.toString(chronicler), '",');
         json = string.concat(json, '"identityRegistry":"', vm.toString(IDENTITY_REGISTRY), '",');
-        json = string.concat(json, '"reputationRegistry":"', vm.toString(REPUTATION_REGISTRY), '",');
         json = string.concat(json, '"stalematePenaltyBps":', vm.toString(STALEMATE_PENALTY_BPS), ',');
-        json = string.concat(json, '"convictionPeriod":', vm.toString(CONVICTION_MULTIPLIER_PERIOD), ',');
+        json = string.concat(json, '"debateDividendBps":', vm.toString(DEBATE_DIVIDEND_BPS), ',');
         json = string.concat(json, '"entryFee":"', vm.toString(ENTRY_FEE), '"');
         json = string.concat(json, '},');
 
@@ -148,9 +146,6 @@ contract Deploy is Script {
     }
 
     function _getNetworkName(uint256 chainId) internal pure returns (string memory) {
-        if (chainId == 1) return "Ethereum Mainnet";
-        if (chainId == 5) return "Goerli";
-        if (chainId == 11155111) return "Sepolia";
         if (chainId == 41454) return "Monad Testnet";
         return "Unknown";
     }

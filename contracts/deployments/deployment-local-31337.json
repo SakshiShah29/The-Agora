@@ -17,7 +17,7 @@
     "chroniclerAddress": "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720",
     "identityRegistry": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     "stalematePenaltyBps": 1000,
-    "convictionPeriod": 2592000,
+    "debateDividendBps": 1000,
     "entryFee": "10000000000000000"
   },
   "agents": [

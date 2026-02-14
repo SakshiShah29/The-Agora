@@ -43,7 +43,7 @@ contract DeployLocal is Script {
     // ========== CONFIGURATION ==========
 
     uint256 constant STALEMATE_PENALTY_BPS = 1000;           // 10%
-    uint256 constant CONVICTION_MULTIPLIER_PERIOD = 30 days;
+    uint256 constant DEBATE_DIVIDEND_BPS = 1000;              // 10%
     uint256 constant ENTRY_FEE = 0.01 ether;
     uint256 constant NUM_TEST_AGENTS = 8;
 
@@ -173,11 +173,11 @@ contract DeployLocal is Script {
         BeliefPool beliefPool = new BeliefPool(
             address(mockIdentity),
             STALEMATE_PENALTY_BPS,
-            CONVICTION_MULTIPLIER_PERIOD
+            DEBATE_DIVIDEND_BPS
         );
         console.log("BeliefPool deployed at:", address(beliefPool));
         console.log("  Stalemate penalty:", STALEMATE_PENALTY_BPS, "bps");
-        console.log("  Conviction period:", CONVICTION_MULTIPLIER_PERIOD, "seconds");
+        console.log("  Debate dividend:", DEBATE_DIVIDEND_BPS, "bps");
         console.log("");
 
         // -------------------------------------------------------
@@ -296,7 +296,7 @@ contract DeployLocal is Script {
         json = string.concat(json, '"chroniclerAddress":"', vm.toString(chronicler), '",');
         json = string.concat(json, '"identityRegistry":"', vm.toString(mockIdentity), '",');
         json = string.concat(json, '"stalematePenaltyBps":', vm.toString(STALEMATE_PENALTY_BPS), ',');
-        json = string.concat(json, '"convictionPeriod":', vm.toString(CONVICTION_MULTIPLIER_PERIOD), ',');
+        json = string.concat(json, '"debateDividendBps":', vm.toString(DEBATE_DIVIDEND_BPS), ',');
         json = string.concat(json, '"entryFee":"', vm.toString(ENTRY_FEE), '"');
         json = string.concat(json, '},');
 

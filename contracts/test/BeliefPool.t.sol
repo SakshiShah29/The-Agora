@@ -3,26 +3,27 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/BeliefPool.sol";
+import "../src/BeliefToken.sol";
 import "../src/AgoraGate.sol";
 import "./mocks/MockIdentityRegistry.sol";
-import "./mocks/MockReputationRegistry.sol";
 
 contract BeliefPoolTest is Test {
     BeliefPool public beliefPool;
     AgoraGate public agoraGate;
     MockIdentityRegistry public identityRegistry;
-    MockReputationRegistry public reputationRegistry;
 
     address public deployer;
     address public alice;
     address public bob;
+    address public carol;
     address public chronicler;
 
     uint256 public aliceAgentId;
     uint256 public bobAgentId;
+    uint256 public carolAgentId;
 
     uint256 constant STALEMATE_PENALTY_BPS = 1000; // 10%
-    uint256 constant CONVICTION_PERIOD = 30 days;
+    uint256 constant DEBATE_DIVIDEND_BPS = 1000;   // 10%
     uint256 constant ENTRY_FEE = 0.01 ether;
 
     event Staked(uint256 indexed agentId, uint256 indexed beliefId, uint256 amount, uint256 timestamp);
@@ -32,24 +33,24 @@ contract BeliefPoolTest is Test {
     event DebateEscrowMatched(uint256 indexed debateId, uint256 agentBId);
     event DebateSettled(uint256 indexed debateId, uint256 winnerId, uint256 amount, string outcome);
     event StalematePenaltyPaid(uint256 indexed debateId, uint256 penaltyAmount);
-    event ReputationUpdated(uint256 indexed agentId, int128 newScore, int128 delta);
+    event DividendDistributed(uint256 indexed debateId, uint256 indexed beliefId, uint256 amount);
     event AgentExited(uint256 indexed agentId);
 
     function setUp() public {
         deployer = address(this);
         alice = makeAddr("alice");
         bob = makeAddr("bob");
+        carol = makeAddr("carol");
         chronicler = makeAddr("chronicler");
 
         // Deploy mocks
         identityRegistry = new MockIdentityRegistry();
-        reputationRegistry = new MockReputationRegistry();
 
-        // Deploy contracts (v3.0 - no ValidationRegistry, no ReputationRegistry)
+        // Deploy contracts
         beliefPool = new BeliefPool(
             address(identityRegistry),
             STALEMATE_PENALTY_BPS,
-            CONVICTION_PERIOD
+            DEBATE_DIVIDEND_BPS
         );
 
         agoraGate = new AgoraGate(
@@ -69,9 +70,13 @@ contract BeliefPoolTest is Test {
         vm.prank(bob);
         bobAgentId = identityRegistry.register("ipfs://bob");
 
+        vm.prank(carol);
+        carolAgentId = identityRegistry.register("ipfs://carol");
+
         // Fund test accounts
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
+        vm.deal(carol, 100 ether);
         vm.deal(chronicler, 1 ether);
     }
 
@@ -89,25 +94,56 @@ contract BeliefPoolTest is Test {
 
         BeliefPool.BeliefPosition memory belief4 = beliefPool.getBelief(4);
         assertEq(belief4.name, "Stoicism");
-
-        BeliefPool.BeliefPosition memory belief5 = beliefPool.getBelief(5);
-        assertEq(belief5.name, "Hedonism");
     }
 
     function testGetAllBeliefs() public {
-        BeliefPool.BeliefPosition[5] memory allBeliefs = beliefPool.getAllBeliefs();
+        BeliefPool.BeliefPosition[4] memory allBeliefs = beliefPool.getAllBeliefs();
 
-        assertEq(allBeliefs.length, 5);
+        assertEq(allBeliefs.length, 4);
         assertEq(allBeliefs[0].id, 1);
-        assertEq(allBeliefs[4].id, 5);
+        assertEq(allBeliefs[3].id, 4);
     }
 
-    function testCannotGetBeliefZeroOrSix() public {
+    function testCannotGetBeliefZeroOrFive() public {
         vm.expectRevert("Invalid belief");
         beliefPool.getBelief(0);
 
         vm.expectRevert("Invalid belief");
-        beliefPool.getBelief(6);
+        beliefPool.getBelief(5);
+    }
+
+    // ========== LP TOKEN TESTS ==========
+
+    function testBeliefTokensDeployed() public {
+        for (uint256 i = 1; i <= 4; i++) {
+            address tokenAddr = beliefPool.getBeliefToken(i);
+            assertTrue(tokenAddr != address(0));
+            BeliefToken token = BeliefToken(tokenAddr);
+            assertEq(token.pool(), address(beliefPool));
+        }
+    }
+
+    function testBeliefTokenNonTransferable() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+
+        vm.prank(alice);
+        vm.expectRevert(BeliefToken.TransfersDisabled.selector);
+        token.transfer(bob, 0.5 ether);
+    }
+
+    function testOnlyPoolCanMintBurn() public {
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+
+        vm.prank(alice);
+        vm.expectRevert(BeliefToken.OnlyPool.selector);
+        token.mint(alice, 1 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(BeliefToken.OnlyPool.selector);
+        token.burn(alice, 1 ether);
     }
 
     // ========== STAKING TESTS ==========
@@ -119,12 +155,12 @@ contract BeliefPoolTest is Test {
 
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
 
-        BeliefPool.StakeInfo memory stakeInfo = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(stakeInfo.amount, 1 ether);
-        assertEq(stakeInfo.beliefId, 1);
+        // Check LP token balance (first staker: 1:1)
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(alice), 1 ether);
 
         BeliefPool.BeliefPosition memory belief = beliefPool.getBelief(1);
-        assertEq(belief.totalStaked, 1 ether);
+        assertEq(belief.totalAssets, 1 ether);
         assertEq(belief.adherentCount, 1);
     }
 
@@ -134,18 +170,18 @@ contract BeliefPoolTest is Test {
         beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
         vm.stopPrank();
 
-        BeliefPool.StakeInfo memory stakeInfo = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(stakeInfo.amount, 1.5 ether);
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(alice), 1.5 ether); // 1:1 since no dividends yet
 
         BeliefPool.BeliefPosition memory belief = beliefPool.getBelief(1);
-        assertEq(belief.totalStaked, 1.5 ether);
+        assertEq(belief.totalAssets, 1.5 ether);
         assertEq(belief.adherentCount, 1); // Still 1 adherent
     }
 
     function testCannotStakeOnInvalidBelief() public {
         vm.prank(alice);
         vm.expectRevert("Invalid belief");
-        beliefPool.stake{value: 1 ether}(6, aliceAgentId);
+        beliefPool.stake{value: 1 ether}(5, aliceAgentId);
     }
 
     function testCannotStakeBelowMinimum() public {
@@ -161,119 +197,58 @@ contract BeliefPoolTest is Test {
     }
 
     function testCannotStakeOnDifferentBeliefWhileHoldingStake() public {
-        // Alice stakes on belief 1
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
 
-        // Alice tries to stake on belief 2 without unstaking from belief 1
         vm.prank(alice);
         vm.expectRevert("Already staked on different belief");
         beliefPool.stake{value: 1 ether}(2, aliceAgentId);
 
-        // Alice can add more stake to belief 1 (same belief)
+        // Can add more to same belief
         vm.prank(alice);
         beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
 
-        BeliefPool.StakeInfo memory stakeInfo = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(stakeInfo.amount, 1.5 ether);
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(alice), 1.5 ether);
     }
 
     function testAgentCurrentBeliefTracking() public {
-        // Initially, agent has no current belief
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 0);
 
-        // Alice stakes on belief 1
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 1);
 
-        // Alice unstakes partially - current belief should still be 1
+        // Partial unstake — still on belief 1
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
         vm.prank(alice);
         beliefPool.unstake(1, 0.5 ether, aliceAgentId);
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 1);
 
-        // Alice fully unstakes - current belief should reset to 0
+        // Full unstake — reset to 0
+        uint256 remainingShares = token.balanceOf(alice);
         vm.prank(alice);
-        beliefPool.unstake(1, 0.5 ether, aliceAgentId);
+        beliefPool.unstake(1, remainingShares, aliceAgentId);
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 0);
 
-        // Alice stakes on belief 2
+        // Stake on belief 2
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(2, aliceAgentId);
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 2);
 
-        // Alice migrates to belief 3
+        // Migrate to belief 3
         vm.prank(alice);
         beliefPool.migrateStake(2, 3, aliceAgentId);
         assertEq(beliefPool.agentCurrentBelief(aliceAgentId), 3);
     }
 
-    // ========== REPUTATION TESTS ==========
-
-    function testInitialReputationSetOnFirstStake() public {
-        // Reputation should be 0 before first stake
-        assertEq(beliefPool.agentReputation(aliceAgentId), 0);
-
+    function testFirstStakerGetsOneToOneShares() public {
         vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        beliefPool.stake{value: 2 ether}(1, aliceAgentId);
 
-        // Reputation should be initialized to 60
-        assertEq(beliefPool.agentReputation(aliceAgentId), 60);
-    }
-
-    function testReputationNotResetOnSecondStake() public {
-        vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
-
-        // Simulate reputation loss
-        vm.prank(alice);
-        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
-
-        // Reputation should still be 60 (not reset)
-        assertEq(beliefPool.agentReputation(aliceAgentId), 60);
-    }
-
-    function testReputationClampedAtMin() public {
-        vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
-
-        // Create a debate and lose multiple times to drop reputation
-        for (uint i = 0; i < 20; i++) {
-            vm.prank(alice);
-            uint256 debateId = beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
-
-            vm.prank(bob);
-            beliefPool.matchDebateEscrow{value: 0.1 ether}(debateId);
-
-            vm.prank(chronicler);
-            beliefPool.submitDebateVerdict(debateId, "winner_agent_b");
-        }
-
-        // Reputation should be clamped at MIN (1)
-        assertEq(beliefPool.agentReputation(aliceAgentId), 1);
-    }
-
-    function testReputationClampedAtMax() public {
-        vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
-
-        vm.prank(bob);
-        beliefPool.stake{value: 1 ether}(2, bobAgentId);
-
-        // Win multiple debates to increase reputation
-        for (uint i = 0; i < 20; i++) {
-            vm.prank(alice);
-            uint256 debateId = beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
-
-            vm.prank(bob);
-            beliefPool.matchDebateEscrow{value: 0.1 ether}(debateId);
-
-            vm.prank(chronicler);
-            beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
-        }
-
-        // Reputation should be clamped at MAX (100)
-        assertEq(beliefPool.agentReputation(aliceAgentId), 100);
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(alice), 2 ether);
+        assertEq(token.totalSupply(), 2 ether);
     }
 
     // ========== UNSTAKING TESTS ==========
@@ -288,117 +263,162 @@ contract BeliefPoolTest is Test {
         vm.expectEmit(true, true, false, true);
         emit Unstaked(aliceAgentId, 1, 1 ether);
 
-        beliefPool.unstake(1, 1 ether, aliceAgentId);
+        beliefPool.unstake(1, 1 ether, aliceAgentId); // burn 1 ether shares
 
         assertEq(alice.balance, aliceBalanceBefore + 1 ether);
 
-        BeliefPool.StakeInfo memory stakeInfo = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(stakeInfo.amount, 1 ether);
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(alice), 1 ether);
     }
 
     function testUnstakeAll() public {
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
 
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        uint256 shares = token.balanceOf(alice);
         vm.prank(alice);
-        beliefPool.unstake(1, 1 ether, aliceAgentId);
+        beliefPool.unstake(1, shares, aliceAgentId);
 
-        // Stake should be deleted
-        BeliefPool.StakeInfo memory stakeInfo = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(stakeInfo.amount, 0);
+        assertEq(token.balanceOf(alice), 0);
 
-        // Adherent count should decrease
         BeliefPool.BeliefPosition memory belief = beliefPool.getBelief(1);
         assertEq(belief.adherentCount, 0);
     }
 
     function testFullUnstakeExitsAgora() public {
-        // Alice enters Agora
         vm.prank(alice);
         agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
         assertTrue(agoraGate.hasEntered(aliceAgentId));
 
-        // Alice stakes
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
 
-        // Alice fully unstakes - should trigger exit
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        uint256 shares = token.balanceOf(alice);
         vm.prank(alice);
         vm.expectEmit(true, false, false, false);
         emit AgentExited(aliceAgentId);
-        beliefPool.unstake(1, 1 ether, aliceAgentId);
+        beliefPool.unstake(1, shares, aliceAgentId);
 
-        // Alice should have exited Agora
         assertFalse(agoraGate.hasEntered(aliceAgentId));
     }
 
     function testPartialUnstakeDoesNotExit() public {
-        // Alice enters Agora
         vm.prank(alice);
         agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
 
-        // Alice stakes
         vm.prank(alice);
         beliefPool.stake{value: 2 ether}(1, aliceAgentId);
 
-        // Alice partially unstakes - should NOT trigger exit
         vm.prank(alice);
         beliefPool.unstake(1, 1 ether, aliceAgentId);
 
-        // Alice should still be in Agora
         assertTrue(agoraGate.hasEntered(aliceAgentId));
     }
 
-    function testReputationPersistsAfterUnstakeAndRestake() public {
-        // Alice stakes and loses debates to drop reputation
+    function testCannotUnstakeMoreThanHeld() public {
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(1, aliceAgentId);
 
+        vm.prank(alice);
+        vm.expectRevert("Insufficient shares");
+        beliefPool.unstake(1, 2 ether, aliceAgentId);
+    }
+
+    function testUnstakeLastShareDrainsPool() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+
+        uint256 balBefore = alice.balance;
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        uint256 shares = token.balanceOf(alice);
+
+        vm.prank(alice);
+        beliefPool.unstake(1, shares, aliceAgentId);
+
+        assertEq(alice.balance, balBefore + 1 ether);
+        assertEq(beliefPool.getBelief(1).totalAssets, 0);
+        assertEq(token.totalSupply(), 0);
+    }
+
+    // ========== ACTIVE DEBATE LOCK TESTS ==========
+
+    function testCannotUnstakeDuringActiveDebate() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
         vm.prank(bob);
         beliefPool.stake{value: 1 ether}(2, bobAgentId);
 
-        // Lose a debate
+        vm.prank(alice);
+        beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
+
+        vm.prank(alice);
+        vm.expectRevert("Agent has active debate");
+        beliefPool.unstake(1, 0.5 ether, aliceAgentId);
+
+        // Agent B is also locked
+        vm.prank(bob);
+        vm.expectRevert("Agent has active debate");
+        beliefPool.unstake(2, 0.5 ether, bobAgentId);
+    }
+
+    function testCannotMigrateDuringActiveDebate() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        vm.prank(alice);
+        beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
+
+        vm.prank(alice);
+        vm.expectRevert("Agent has active debate");
+        beliefPool.migrateStake(1, 2, aliceAgentId);
+    }
+
+    function testUnlockAfterDebateSettled() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.1 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // Both agents unlocked after settlement
+        vm.prank(alice);
+        beliefPool.unstake(1, 0.5 ether, aliceAgentId); // should succeed
+        vm.prank(bob);
+        beliefPool.unstake(2, 0.5 ether, bobAgentId); // should succeed
+    }
+
+    function testUnlockAfterDebateDeclined() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
         vm.prank(alice);
         uint256 debateId = beliefPool.createDebateEscrow{value: 0.1 ether}(aliceAgentId, bobAgentId);
 
         vm.prank(bob);
-        beliefPool.matchDebateEscrow{value: 0.1 ether}(debateId);
+        beliefPool.declineDebateEscrow(debateId);
 
-        vm.prank(chronicler);
-        beliefPool.submitDebateVerdict(debateId, "winner_agent_b");
-
-        int128 reputationAfterLoss = beliefPool.agentReputation(aliceAgentId);
-        assertEq(reputationAfterLoss, 55); // 60 - 5
-
-        // Fully unstake
+        // Both agents unlocked after decline
         vm.prank(alice);
-        beliefPool.unstake(1, 0.9 ether, aliceAgentId);
-
-        // Re-enter Agora
-        vm.prank(alice);
-        agoraGate.enter{value: ENTRY_FEE}(aliceAgentId);
-
-        // Stake again
-        vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
-
-        // Reputation should still be 55 (not reset to 60)
-        assertEq(beliefPool.agentReputation(aliceAgentId), 55);
-    }
-
-    function testCannotUnstakeMoreThanStaked() public {
-        vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
-
-        vm.prank(alice);
-        vm.expectRevert("Insufficient stake");
-        beliefPool.unstake(1, 2 ether, aliceAgentId);
+        beliefPool.unstake(1, 0.5 ether, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.unstake(2, 0.5 ether, bobAgentId);
     }
 
     // ========== MIGRATION (CONVERSION) TESTS ==========
 
     function testMigrateStake() public {
-        // Alice stakes on belief 1
         vm.prank(alice);
         beliefPool.stake{value: 2 ether}(1, aliceAgentId);
 
@@ -408,22 +428,16 @@ contract BeliefPoolTest is Test {
 
         beliefPool.migrateStake(1, 2, aliceAgentId);
 
-        // Old stake should be gone
-        BeliefPool.StakeInfo memory oldStake = beliefPool.getStakeInfo(aliceAgentId, 1);
-        assertEq(oldStake.amount, 0);
+        BeliefToken token1 = BeliefToken(beliefPool.getBeliefToken(1));
+        BeliefToken token2 = BeliefToken(beliefPool.getBeliefToken(2));
 
-        // New stake should exist
-        BeliefPool.StakeInfo memory newStake = beliefPool.getStakeInfo(aliceAgentId, 2);
-        assertEq(newStake.amount, 2 ether);
+        assertEq(token1.balanceOf(alice), 0);
+        assertEq(token2.balanceOf(alice), 2 ether);
 
-        // Belief totals should update
-        BeliefPool.BeliefPosition memory oldBelief = beliefPool.getBelief(1);
-        assertEq(oldBelief.totalStaked, 0);
-        assertEq(oldBelief.adherentCount, 0);
-
-        BeliefPool.BeliefPosition memory newBelief = beliefPool.getBelief(2);
-        assertEq(newBelief.totalStaked, 2 ether);
-        assertEq(newBelief.adherentCount, 1);
+        assertEq(beliefPool.getBelief(1).totalAssets, 0);
+        assertEq(beliefPool.getBelief(1).adherentCount, 0);
+        assertEq(beliefPool.getBelief(2).totalAssets, 2 ether);
+        assertEq(beliefPool.getBelief(2).adherentCount, 1);
     }
 
     function testCannotMigrateToSameBelief() public {
@@ -441,9 +455,31 @@ contract BeliefPoolTest is Test {
         beliefPool.migrateStake(1, 2, aliceAgentId);
     }
 
+    // ========== DEBATE GATING TESTS ==========
+
+    function testCannotCreateDebateWithoutStake() public {
+        // Neither agent staked
+        vm.prank(alice);
+        vm.expectRevert("Agent A has no belief stake");
+        beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+
+        // Agent A staked, Agent B not
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+
+        vm.prank(alice);
+        vm.expectRevert("Agent B has no belief stake");
+        beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+    }
+
     // ========== DEBATE ESCROW TESTS ==========
 
     function testCreateDebateEscrow() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
+
         vm.prank(alice);
         vm.expectEmit(true, true, true, true);
         emit DebateEscrowCreated(1, aliceAgentId, bobAgentId, 1 ether);
@@ -461,6 +497,11 @@ contract BeliefPoolTest is Test {
 
     function testMatchDebateEscrow() public {
         vm.prank(alice);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
+
+        vm.prank(alice);
         uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
 
         vm.prank(bob);
@@ -475,6 +516,11 @@ contract BeliefPoolTest is Test {
 
     function testCannotMatchWithWrongAmount() public {
         vm.prank(alice);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
+
+        vm.prank(alice);
         uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
 
         vm.prank(bob);
@@ -484,54 +530,49 @@ contract BeliefPoolTest is Test {
 
     function testCannotDebateSelf() public {
         vm.prank(alice);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+
+        vm.prank(alice);
         vm.expectRevert("Cannot debate self");
         beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, aliceAgentId);
     }
 
-    // ========== CHRONICLER VERDICT TESTS (ATOMIC SETTLEMENT) ==========
+    // ========== CHRONICLER VERDICT TESTS ==========
 
     function testChroniclerVerdictWinnerAgentA() public {
-        // Agents must stake first to initialize reputation
         vm.prank(alice);
         beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
-
         vm.prank(bob);
         beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
 
-        // Create and match debate
         vm.prank(alice);
         uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
-
         vm.prank(bob);
         beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
 
         uint256 aliceBalanceBefore = alice.balance;
 
-        // Chronicler submits verdict (atomic settlement)
         vm.prank(chronicler);
-        vm.expectEmit(true, false, false, false);
-        emit DebateSettled(debateId, aliceAgentId, 2 ether, "winner");
-
         beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
 
-        // Alice should receive full pot immediately
-        assertEq(alice.balance, aliceBalanceBefore + 2 ether);
+        // 10% dividend = 0.2 ether to belief 1 pool
+        // Winner gets 1.8 ether
+        assertEq(alice.balance, aliceBalanceBefore + 1.8 ether);
 
-        // Debate should be settled
         BeliefPool.DebateEscrow memory debate = beliefPool.getDebate(debateId);
         assertEq(uint(debate.status), uint(BeliefPool.DebateStatus.SettledWinner));
         assertEq(debate.winnerId, aliceAgentId);
         assertEq(debate.verdict, "winner_agent_a");
-
-        // Check reputation updates
-        assertEq(beliefPool.agentReputation(aliceAgentId), 65); // 60 + 5
-        assertEq(beliefPool.agentReputation(bobAgentId), 55);   // 60 - 5
     }
 
     function testChroniclerVerdictWinnerAgentB() public {
         vm.prank(alice);
-        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
 
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
         vm.prank(bob);
         beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
 
@@ -540,8 +581,8 @@ contract BeliefPoolTest is Test {
         vm.prank(chronicler);
         beliefPool.submitDebateVerdict(debateId, "winner_agent_b");
 
-        // Bob should receive full pot
-        assertEq(bob.balance, bobBalanceBefore + 2 ether);
+        // 10% dividend = 0.2 ether to belief 2 pool
+        assertEq(bob.balance, bobBalanceBefore + 1.8 ether);
 
         BeliefPool.DebateEscrow memory debate = beliefPool.getDebate(debateId);
         assertEq(debate.winnerId, bobAgentId);
@@ -549,8 +590,12 @@ contract BeliefPoolTest is Test {
 
     function testChroniclerVerdictStalemate() public {
         vm.prank(alice);
-        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
 
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
         vm.prank(bob);
         beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
 
@@ -558,7 +603,6 @@ contract BeliefPoolTest is Test {
         uint256 bobBalanceBefore = bob.balance;
         uint256 treasuryBalanceBefore = address(agoraGate).balance;
 
-        // 10% penalty = 0.1 ether per agent
         uint256 expectedReturn = 0.9 ether;
         uint256 expectedPenalty = 0.2 ether;
 
@@ -568,11 +612,8 @@ contract BeliefPoolTest is Test {
 
         beliefPool.submitDebateVerdict(debateId, "stalemate");
 
-        // Both agents get stakes back minus penalty
         assertEq(alice.balance, aliceBalanceBefore + expectedReturn);
         assertEq(bob.balance, bobBalanceBefore + expectedReturn);
-
-        // Treasury receives penalties
         assertEq(address(agoraGate).balance, treasuryBalanceBefore + expectedPenalty);
 
         BeliefPool.DebateEscrow memory debate = beliefPool.getDebate(debateId);
@@ -582,8 +623,12 @@ contract BeliefPoolTest is Test {
 
     function testUnknownVerdictDefaultsToStalemate() public {
         vm.prank(alice);
-        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
 
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
         vm.prank(bob);
         beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
 
@@ -596,8 +641,12 @@ contract BeliefPoolTest is Test {
 
     function testOnlyChroniclerCanSubmitVerdict() public {
         vm.prank(alice);
-        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
 
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
         vm.prank(bob);
         beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
 
@@ -608,6 +657,11 @@ contract BeliefPoolTest is Test {
 
     function testCannotSettleDebateNotActive() public {
         vm.prank(alice);
+        beliefPool.stake{value: 0.5 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 0.5 ether}(2, bobAgentId);
+
+        vm.prank(alice);
         uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
 
         vm.prank(chronicler);
@@ -615,10 +669,167 @@ contract BeliefPoolTest is Test {
         beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
     }
 
+    // ========== DIVIDEND / VAULT MATH TESTS ==========
+
+    function testSharePriceIncreasesWithDividend() public {
+        // Alice stakes 1 ETH on belief 1
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+
+        // Share price starts at 1:1
+        assertEq(beliefPool.getSharePrice(1), 1e18);
+
+        // Bob stakes on belief 2 for the debate
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        // Create debate, Alice wins
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.5 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.5 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // Dividend = 10% of 1 ETH pot = 0.1 ETH goes to belief 1 pool
+        // totalAssets = 1 + 0.1 = 1.1 ETH, totalShares = 1 ETH
+        // Share price = 1.1e18
+        assertEq(beliefPool.getSharePrice(1), 1.1 ether);
+    }
+
+    function testDividendAccrualSingleStaker() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        // Alice wins debate — 0.1 ETH dividend
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.5 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.5 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // Alice unstakes all — should get original 1 ETH + 0.1 ETH dividend
+        uint256 balBefore = alice.balance;
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        uint256 shares = token.balanceOf(alice);
+        vm.prank(alice);
+        beliefPool.unstake(1, shares, aliceAgentId);
+
+        assertEq(alice.balance, balBefore + 1.1 ether);
+    }
+
+    function testDividendAccrualMultipleStakers() public {
+        // Alice stakes 3 ETH, Carol stakes 1 ETH on same belief
+        vm.prank(alice);
+        beliefPool.stake{value: 3 ether}(1, aliceAgentId);
+        vm.prank(carol);
+        beliefPool.stake{value: 1 ether}(1, carolAgentId);
+
+        // Bob on a different belief for the debate
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        // Alice wins debate — 0.2 ETH dividend to belief 1 pool (10% of 2 ETH pot)
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 1 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 1 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // totalAssets = 4 + 0.2 = 4.2 ETH, totalShares = 4 ETH
+        // Alice has 3 shares → 3 * 4.2 / 4 = 3.15 ETH
+        // Carol has 1 share → 1 * 4.2 / 4 = 1.05 ETH
+        (uint256 aliceValue, ) = beliefPool.getAgentStakeValue(aliceAgentId, 1);
+        (uint256 carolValue, ) = beliefPool.getAgentStakeValue(carolAgentId, 1);
+
+        assertEq(aliceValue, 3.15 ether);
+        assertEq(carolValue, 1.05 ether);
+    }
+
+    function testNoDividendOnStalemate() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        uint256 belief1AssetsBefore = beliefPool.getBelief(1).totalAssets;
+        uint256 belief2AssetsBefore = beliefPool.getBelief(2).totalAssets;
+
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.5 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.5 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "stalemate");
+
+        // No belief pool should have gained assets from dividend
+        assertEq(beliefPool.getBelief(1).totalAssets, belief1AssetsBefore);
+        assertEq(beliefPool.getBelief(2).totalAssets, belief2AssetsBefore);
+    }
+
+    function testSecondStakerGetsProportionalShares() public {
+        // Alice stakes 1 ETH (first staker, 1:1)
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        // Alice wins a debate — 0.1 ETH dividend
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.5 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.5 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // totalAssets = 1.1 ETH, totalShares = 1 ETH, price = 1.1
+        // Carol stakes 1.1 ETH → gets 1.1 * 1 / 1.1 = 1 share
+        vm.prank(carol);
+        beliefPool.stake{value: 1.1 ether}(1, carolAgentId);
+
+        BeliefToken token = BeliefToken(beliefPool.getBeliefToken(1));
+        assertEq(token.balanceOf(carol), 1 ether); // 1 share for 1.1 ETH
+        assertEq(token.balanceOf(alice), 1 ether);  // Alice still has 1 share
+
+        // Both shares worth the same now: 2.2 ETH / 2 shares = 1.1 each
+        (uint256 aliceValue, ) = beliefPool.getAgentStakeValue(aliceAgentId, 1);
+        (uint256 carolValue, ) = beliefPool.getAgentStakeValue(carolAgentId, 1);
+        assertEq(aliceValue, 1.1 ether);
+        assertEq(carolValue, 1.1 ether);
+    }
+
+    function testMigrateRealizesDividendGains() public {
+        vm.prank(alice);
+        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        vm.prank(bob);
+        beliefPool.stake{value: 1 ether}(2, bobAgentId);
+
+        // Alice wins — dividend makes belief 1 pool worth 1.1 ETH
+        vm.prank(alice);
+        uint256 debateId = beliefPool.createDebateEscrow{value: 0.5 ether}(aliceAgentId, bobAgentId);
+        vm.prank(bob);
+        beliefPool.matchDebateEscrow{value: 0.5 ether}(debateId);
+        vm.prank(chronicler);
+        beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
+
+        // Alice migrates to belief 2 — should carry 1.1 ETH value
+        vm.prank(alice);
+        beliefPool.migrateStake(1, 2, aliceAgentId);
+
+        // Belief 1 should be empty, belief 2 should have 1 + 1.1 = 2.1 ETH
+        assertEq(beliefPool.getBelief(1).totalAssets, 0);
+        assertEq(beliefPool.getBelief(2).totalAssets, 2.1 ether);
+    }
+
     // ========== VIEW FUNCTIONS TESTS ==========
 
     function testGetAgentBelief() public {
-        assertEq(beliefPool.getAgentBelief(aliceAgentId), 0); // No belief
+        assertEq(beliefPool.getAgentBelief(aliceAgentId), 0);
 
         vm.prank(alice);
         beliefPool.stake{value: 1 ether}(2, aliceAgentId);
@@ -626,18 +837,12 @@ contract BeliefPoolTest is Test {
         assertEq(beliefPool.getAgentBelief(aliceAgentId), 2);
     }
 
-    function testGetEffectiveStake() public {
+    function testPreviewRedeem() public {
         vm.prank(alice);
-        beliefPool.stake{value: 1 ether}(1, aliceAgentId);
+        beliefPool.stake{value: 2 ether}(1, aliceAgentId);
 
-        // Initially, effective stake = actual stake
-        assertEq(beliefPool.getEffectiveStake(aliceAgentId, 1), 1 ether);
-
-        // Fast forward 30 days (conviction period)
-        vm.warp(block.timestamp + CONVICTION_PERIOD);
-
-        // Effective stake should be 2x (10000 + 10000 = 20000 basis points)
-        assertEq(beliefPool.getEffectiveStake(aliceAgentId, 1), 2 ether);
+        uint256 ethOut = beliefPool.previewRedeem(1, 1 ether);
+        assertEq(ethOut, 1 ether);
     }
 
     // ========== INTEGRATION TESTS ==========
@@ -664,12 +869,15 @@ contract BeliefPoolTest is Test {
         vm.prank(chronicler);
         beliefPool.submitDebateVerdict(debateId, "winner_agent_a");
 
-        // 5. Verify Alice received full pot
-        assertEq(alice.balance, aliceBalanceBefore + 1 ether);
+        // 5. Winner gets 90% of pot (0.9 ETH), 10% (0.1 ETH) to belief 1 pool
+        assertEq(alice.balance, aliceBalanceBefore + 0.9 ether);
 
         // 6. Verify debate settled
         BeliefPool.DebateEscrow memory debate = beliefPool.getDebate(debateId);
         assertEq(uint(debate.status), uint(BeliefPool.DebateStatus.SettledWinner));
         assertEq(debate.winnerId, aliceAgentId);
+
+        // 7. Belief 1 pool gained dividend
+        assertEq(beliefPool.getBelief(1).totalAssets, 2.1 ether); // 2 + 0.1
     }
 }

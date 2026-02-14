@@ -4,11 +4,14 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IIdentityRegistry.sol";
+import "./BeliefToken.sol";
 
 /**
  * @title BeliefPool
- * @notice Core staking and debate mechanics for The Agora
- * @dev Integrates with ERC-8004 IdentityRegistry and ReputationRegistry
+ * @notice Core staking and debate mechanics for The Agora.
+ *         Each belief has an ERC-20 LP token (non-transferable). Staking mints
+ *         shares; debate winnings flow as dividends that increase share price.
+ * @dev Integrates with ERC-8004 IdentityRegistry.
  */
 contract BeliefPool is Ownable, ReentrancyGuard {
 
@@ -18,17 +21,12 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         uint256 id;
         string name;
         bytes32 descriptionHash;
-        uint256 totalStaked;
+        uint256 totalAssets;       // Total MON backing this belief (stakes + dividends)
         uint256 adherentCount;
+        BeliefToken token;         // Non-transferable LP token for this belief
     }
 
-    struct StakeInfo {
-        uint256 amount;
-        uint256 stakedAt;
-        uint256 beliefId;
-    }
-
-    enum DebateStatus {
+enum DebateStatus {
         Pending,           // Waiting for Agent B to match
         Active,            // Both staked, awaiting Chronicler verdict
         SettledWinner,     // Winner paid
@@ -56,33 +54,24 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     address public agoraGateTreasury;
 
     uint256 public stalematePenaltyBps;         // Basis points (1000 = 10%)
-    uint256 public convictionMultiplierPeriod;  // Time period for conviction multiplier
+    uint256 public debateDividendBps;            // Basis points of pot to winner's belief pool
     uint256 public constant MIN_STAKE_AMOUNT = 0.001 ether;
 
     uint256 public nextDebateId;
 
-    // beliefId => BeliefPosition (IDs 1-5)
+    // beliefId => BeliefPosition (IDs 1-4)
     mapping(uint256 => BeliefPosition) public beliefs;
-
-    // agentId => beliefId => StakeInfo
-    mapping(uint256 => mapping(uint256 => StakeInfo)) public agentStakes;
 
     // debateId => DebateEscrow
     mapping(uint256 => DebateEscrow) public debates;
 
-    // agentId => reputation score (0-100, starts at 60)
-    mapping(uint256 => int128) public agentReputation;
-
     // agentId => current belief they are staked on (0 if not staked)
     mapping(uint256 => uint256) public agentCurrentBelief;
 
-    // ========== CONSTANTS ==========
+    // agentId => active debateId (0 if not in a debate)
+    mapping(uint256 => uint256) public agentActiveDebate;
 
-    int128 public constant INITIAL_REPUTATION = 60;
-    int128 public constant MAX_REPUTATION = 100;
-    int128 public constant MIN_REPUTATION = 1;
-
-    // ========== EVENTS ==========
+// ========== EVENTS ==========
 
     event Staked(uint256 indexed agentId, uint256 indexed beliefId, uint256 amount, uint256 timestamp);
     event Unstaked(uint256 indexed agentId, uint256 indexed beliefId, uint256 amount);
@@ -94,27 +83,29 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     event ChroniclerAddressUpdated(address indexed chronicler);
     event AgoraGateTreasuryUpdated(address indexed treasury);
     event StalematePenaltyUpdated(uint256 penaltyBps);
-    event ReputationUpdated(uint256 indexed agentId, int128 newScore, int128 delta);
+    event DividendDistributed(uint256 indexed debateId, uint256 indexed beliefId, uint256 amount);
+    event DebateDividendUpdated(uint256 dividendBps);
 
     // ========== CONSTRUCTOR ==========
 
     constructor(
         address _identityRegistry,
         uint256 _stalematePenaltyBps,
-        uint256 _convictionMultiplierPeriod
+        uint256 _debateDividendBps
     ) Ownable(msg.sender) {
         require(_identityRegistry != address(0), "Invalid identity registry");
         require(_stalematePenaltyBps <= 5000, "Penalty too high");
+        require(_debateDividendBps <= 5000, "Dividend too high");
 
         identityRegistry = IIdentityRegistry(_identityRegistry);
         stalematePenaltyBps = _stalematePenaltyBps;
-        convictionMultiplierPeriod = _convictionMultiplierPeriod;
+        debateDividendBps = _debateDividendBps;
 
-        // Initialize the 4 fixed beliefs
-        beliefs[1] = BeliefPosition(1, "Nihilism", keccak256("ipfs://nihilism"), 0, 0);
-        beliefs[2] = BeliefPosition(2, "Existentialism", keccak256("ipfs://existentialism"), 0, 0);
-        beliefs[3] = BeliefPosition(3, "Absurdism", keccak256("ipfs://absurdism"), 0, 0);
-        beliefs[4] = BeliefPosition(4, "Stoicism", keccak256("ipfs://stoicism"), 0, 0);
+        // Initialize the 4 fixed beliefs with their LP tokens
+        beliefs[1] = BeliefPosition(1, "Nihilism", keccak256("ipfs://nihilism"), 0, 0, new BeliefToken("Agora Nihilism LP", "aNIH", address(this)));
+        beliefs[2] = BeliefPosition(2, "Existentialism", keccak256("ipfs://existentialism"), 0, 0, new BeliefToken("Agora Existentialism LP", "aEXI", address(this)));
+        beliefs[3] = BeliefPosition(3, "Absurdism", keccak256("ipfs://absurdism"), 0, 0, new BeliefToken("Agora Absurdism LP", "aABS", address(this)));
+        beliefs[4] = BeliefPosition(4, "Stoicism", keccak256("ipfs://stoicism"), 0, 0, new BeliefToken("Agora Stoicism LP", "aSTO", address(this)));
 
         nextDebateId = 1;
     }
@@ -122,7 +113,7 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     // ========== STAKING FUNCTIONS ==========
 
     /**
-     * @notice Stake on one of the 4 fixed beliefs
+     * @notice Stake MON on one of the 4 fixed beliefs. Mints LP tokens.
      */
     function stake(uint256 beliefId, uint256 agentId) external payable {
         require(beliefId >= 1 && beliefId <= 4, "Invalid belief");
@@ -133,109 +124,144 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         uint256 currentBelief = agentCurrentBelief[agentId];
         require(currentBelief == 0 || currentBelief == beliefId, "Already staked on different belief");
 
-        StakeInfo storage stakeInfo = agentStakes[agentId][beliefId];
+        BeliefToken token = beliefs[beliefId].token;
+        address wallet = _getAgentWallet(agentId);
 
-        // Initialize reputation on very first stake (0 means never staked before)
-        if (agentReputation[agentId] == 0) {
-            agentReputation[agentId] = INITIAL_REPUTATION;
+        // Calculate shares to mint (vault math)
+        uint256 sharesToMint;
+        uint256 totalShares = token.totalSupply();
+        uint256 totalAssets = beliefs[beliefId].totalAssets;
+
+        if (totalShares == 0 || totalAssets == 0) {
+            sharesToMint = msg.value;
+        } else {
+            sharesToMint = (msg.value * totalShares) / totalAssets;
         }
 
-        if (stakeInfo.amount == 0) {
+        require(sharesToMint > 0, "Zero shares");
+
+        // Update adherent tracking
+        if (token.balanceOf(wallet) == 0) {
             beliefs[beliefId].adherentCount++;
-            agentCurrentBelief[agentId] = beliefId; // Track current belief
+            agentCurrentBelief[agentId] = beliefId;
         }
 
-        stakeInfo.amount += msg.value;
-        stakeInfo.stakedAt = block.timestamp;
-        stakeInfo.beliefId = beliefId;
-
-        beliefs[beliefId].totalStaked += msg.value;
+        // Update total assets and mint shares
+        beliefs[beliefId].totalAssets += msg.value;
+        token.mint(wallet, sharesToMint);
 
         emit Staked(agentId, beliefId, msg.value, block.timestamp);
     }
 
     /**
-     * @notice Unstake from a belief
+     * @notice Unstake by burning LP shares. Receives proportional MON.
+     * @param beliefId The belief to unstake from
+     * @param shares Number of LP token shares to burn
+     * @param agentId The agent's NFT ID
      */
-    function unstake(uint256 beliefId, uint256 amount, uint256 agentId)
+    function unstake(uint256 beliefId, uint256 shares, uint256 agentId)
         external
         nonReentrant
     {
         _verifyAgentOwnership(agentId);
+        require(shares > 0, "Zero shares");
+        require(agentActiveDebate[agentId] == 0, "Agent has active debate");
 
-        StakeInfo storage stakeInfo = agentStakes[agentId][beliefId];
-        require(stakeInfo.amount >= amount, "Insufficient stake");
+        BeliefToken token = beliefs[beliefId].token;
+        address wallet = _getAgentWallet(agentId);
 
-        stakeInfo.amount -= amount;
-        beliefs[beliefId].totalStaked -= amount;
+        require(token.balanceOf(wallet) >= shares, "Insufficient shares");
 
-        bool fullyUnstaked = (stakeInfo.amount == 0);
+        // Calculate MON to return
+        uint256 totalShares = token.totalSupply();
+        uint256 totalAssets = beliefs[beliefId].totalAssets;
+        uint256 monOut = (shares * totalAssets) / totalShares;
+
+        // Burn shares and update assets
+        token.burn(wallet, shares);
+        beliefs[beliefId].totalAssets -= monOut;
+
+        bool fullyUnstaked = (token.balanceOf(wallet) == 0);
 
         if (fullyUnstaked) {
             beliefs[beliefId].adherentCount--;
-            delete agentStakes[agentId][beliefId];
-            agentCurrentBelief[agentId] = 0; // Reset current belief
+            agentCurrentBelief[agentId] = 0;
         }
 
-        address wallet = _getAgentWallet(agentId);
-        (bool success, ) = wallet.call{value: amount}("");
+        // Transfer MON
+        (bool success, ) = wallet.call{value: monOut}("");
         require(success, "Transfer failed");
 
-        emit Unstaked(agentId, beliefId, amount);
+        emit Unstaked(agentId, beliefId, monOut);
 
         // If agent has fully unstaked, exit Agora (if they were in it)
         if (fullyUnstaked && agoraGateTreasury != address(0)) {
-            // Try to exit, but don't revert if they weren't in Agora
             (bool exitSuccess, ) = agoraGateTreasury.call(
                 abi.encodeWithSignature("exitAgent(uint256)", agentId)
             );
-            // Intentionally ignore exitSuccess - agent may not have entered
-            exitSuccess;
+            exitSuccess; // Intentionally ignore
         }
     }
 
     // ========== CONVERSION FUNCTION ==========
 
     /**
-     * @notice Migrate stake when agent converts (off-chain conviction dropped below threshold)
+     * @notice Migrate stake when agent converts. Burns old LP tokens, mints new ones
+     *         at the new belief's current share price. MON stays in the contract.
      */
     function migrateStake(uint256 fromBeliefId, uint256 toBeliefId, uint256 agentId)
         external
         nonReentrant
     {
         _verifyAgentOwnership(agentId);
-        require(fromBeliefId >= 1 && fromBeliefId <= 5, "Invalid from belief");
-        require(toBeliefId >= 1 && toBeliefId <= 5, "Invalid to belief");
+        require(agentActiveDebate[agentId] == 0, "Agent has active debate");
+        require(fromBeliefId >= 1 && fromBeliefId <= 4, "Invalid from belief");
+        require(toBeliefId >= 1 && toBeliefId <= 4, "Invalid to belief");
         require(fromBeliefId != toBeliefId, "Same belief");
 
-        StakeInfo storage oldStake = agentStakes[agentId][fromBeliefId];
-        require(oldStake.amount > 0, "No stake to migrate");
+        address wallet = _getAgentWallet(agentId);
 
-        uint256 amount = oldStake.amount;
+        // --- Burn all shares from old belief ---
+        BeliefToken fromToken = beliefs[fromBeliefId].token;
+        uint256 fromShares = fromToken.balanceOf(wallet);
+        require(fromShares > 0, "No stake to migrate");
 
-        // Update beliefs
-        beliefs[fromBeliefId].totalStaked -= amount;
+        uint256 fromTotalShares = fromToken.totalSupply();
+        uint256 fromTotalAssets = beliefs[fromBeliefId].totalAssets;
+        uint256 monValue = (fromShares * fromTotalAssets) / fromTotalShares;
+
+        fromToken.burn(wallet, fromShares);
+        beliefs[fromBeliefId].totalAssets -= monValue;
         beliefs[fromBeliefId].adherentCount--;
-        beliefs[toBeliefId].totalStaked += amount;
+
+        // --- Mint shares in new belief ---
+        BeliefToken toToken = beliefs[toBeliefId].token;
+        uint256 toTotalShares = toToken.totalSupply();
+        uint256 toTotalAssets = beliefs[toBeliefId].totalAssets;
+
+        uint256 newShares;
+        if (toTotalShares == 0 || toTotalAssets == 0) {
+            newShares = monValue;
+        } else {
+            newShares = (monValue * toTotalShares) / toTotalAssets;
+        }
+
+        require(newShares > 0, "Zero shares");
+
+        toToken.mint(wallet, newShares);
+        beliefs[toBeliefId].totalAssets += monValue;
         beliefs[toBeliefId].adherentCount++;
 
-        // Update agent stake
-        StakeInfo storage newStake = agentStakes[agentId][toBeliefId];
-        newStake.amount += amount;
-        newStake.stakedAt = block.timestamp;
-        newStake.beliefId = toBeliefId;
+        agentCurrentBelief[agentId] = toBeliefId;
 
-        delete agentStakes[agentId][fromBeliefId];
-        agentCurrentBelief[agentId] = toBeliefId; // Update current belief
-
-        // Update IdentityRegistry metadata (current belief only)
+        // Update IdentityRegistry metadata
         identityRegistry.setMetadata(
             agentId,
             "belief",
             abi.encode(beliefs[toBeliefId].name)
         );
 
-        emit StakeMigrated(agentId, fromBeliefId, toBeliefId, amount);
+        emit StakeMigrated(agentId, fromBeliefId, toBeliefId, monValue);
     }
 
     // ========== DEBATE ESCROW FUNCTIONS ==========
@@ -254,16 +280,28 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         _verifyAgentOwnership(agentAId);
         require(_agentExists(agentBId), "Agent B not found");
 
+        // Debate gating: both agents must have active belief stakes
+        require(agentCurrentBelief[agentAId] != 0, "Agent A has no belief stake");
+        require(agentCurrentBelief[agentBId] != 0, "Agent B has no belief stake");
+
         // Ensure previous debate is settled (skip check for first debate)
         if (nextDebateId > 1) {
             require(
                 debates[nextDebateId - 1].status == DebateStatus.SettledStalemate ||
-                debates[nextDebateId - 1].status == DebateStatus.SettledWinner,
+                debates[nextDebateId - 1].status == DebateStatus.SettledWinner ||
+                debates[nextDebateId - 1].status == DebateStatus.Cancelled,
                 "Old debate not settled"
             );
         }
 
+        // Lock both agents from unstaking/migrating during debate
+        require(agentActiveDebate[agentAId] == 0, "Agent A already in debate");
+        require(agentActiveDebate[agentBId] == 0, "Agent B already in debate");
+
         debateId = nextDebateId++;
+
+        agentActiveDebate[agentAId] = debateId;
+        agentActiveDebate[agentBId] = debateId;
 
         debates[debateId] = DebateEscrow({
             debateId: debateId,
@@ -295,12 +333,19 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         emit DebateEscrowMatched(debateId, debate.agentBId);
     }
 
+    /**
+    * @notice Decline debate escrow (Agent B declines before matching)
+    */
     function declineDebateEscrow(uint256 debateId) external nonReentrant {
         DebateEscrow storage debate = debates[debateId];
         require(debate.status == DebateStatus.Pending, "Not pending");
         require(msg.sender == _getAgentWallet(debate.agentBId), "Not agent B");
 
-        debate.status = DebateStatus.Cancelled; // Mark as settled to prevent reuse
+        debate.status = DebateStatus.Cancelled;
+
+        // Unlock both agents
+        agentActiveDebate[debate.agentAId] = 0;
+        agentActiveDebate[debate.agentBId] = 0;
 
         // Refund Agent A
         address walletA = _getAgentWallet(debate.agentAId);
@@ -336,22 +381,25 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         uint256 totalPot = debate.stakeAmount * 2;
 
         if (isWinner) {
-            // Winner takes all
             uint256 winnerId = (winnerIndex == 0) ? debate.agentAId : debate.agentBId;
-            uint256 loserId = (winnerIndex == 0) ? debate.agentBId : debate.agentAId;
+
+            // Calculate dividend to winner's belief pool
+            uint256 dividend = (totalPot * debateDividendBps) / 10000;
+            uint256 winnerPayout = totalPot - dividend;
+
+            // Dividend increases share price for all stakers of winner's belief
+            uint256 winnerBeliefId = agentCurrentBelief[winnerId];
+            beliefs[winnerBeliefId].totalAssets += dividend;
 
             address winnerWallet = _getAgentWallet(winnerId);
-            (bool success, ) = winnerWallet.call{value: totalPot}("");
+            (bool success, ) = winnerWallet.call{value: winnerPayout}("");
             require(success, "Transfer failed");
 
             debate.status = DebateStatus.SettledWinner;
             debate.winnerId = winnerId;
 
-            // Record in ReputationRegistry
-            _submitDebateFeedback(winnerId, 5, "debate_win");
-            _submitDebateFeedback(loserId, -5, "debate_loss");
-
-            emit DebateSettled(debateId, winnerId, totalPot, "winner");
+            emit DividendDistributed(debateId, winnerBeliefId, dividend);
+            emit DebateSettled(debateId, winnerId, winnerPayout, "winner");
 
         } else if (isStalemate) {
             // Return stakes minus penalty
@@ -373,13 +421,13 @@ contract BeliefPool is Ownable, ReentrancyGuard {
 
             debate.status = DebateStatus.SettledStalemate;
 
-            // Record in ReputationRegistry
-            _submitDebateFeedback(debate.agentAId, 0, "stalemate");
-            _submitDebateFeedback(debate.agentBId, 0, "stalemate");
-
             emit DebateSettled(debateId, 0, 0, "stalemate");
             emit StalematePenaltyPaid(debateId, penalty * 2);
         }
+
+        // Unlock both agents
+        agentActiveDebate[debate.agentAId] = 0;
+        agentActiveDebate[debate.agentBId] = 0;
 
         debate.settledAt = block.timestamp;
     }
@@ -387,17 +435,17 @@ contract BeliefPool is Ownable, ReentrancyGuard {
     // ========== VIEW FUNCTIONS ==========
 
     /**
-     * @notice Get all 5 beliefs
+     * @notice Get all 4 beliefs
      */
-    function getAllBeliefs() external view returns (BeliefPosition[5] memory) {
-        return [beliefs[1], beliefs[2], beliefs[3], beliefs[4], beliefs[5]];
+    function getAllBeliefs() external view returns (BeliefPosition[4] memory) {
+        return [beliefs[1], beliefs[2], beliefs[3], beliefs[4]];
     }
 
     /**
      * @notice Get single belief
      */
     function getBelief(uint256 beliefId) external view returns (BeliefPosition memory) {
-        require(beliefId >= 1 && beliefId <= 5, "Invalid belief");
+        require(beliefId >= 1 && beliefId <= 4, "Invalid belief");
         return beliefs[beliefId];
     }
 
@@ -405,50 +453,73 @@ contract BeliefPool is Ownable, ReentrancyGuard {
      * @notice Get agent's current belief affiliation
      */
     function getAgentBelief(uint256 agentId) external view returns (uint256) {
-        for (uint256 i = 1; i <= 5; i++) {
-            if (agentStakes[agentId][i].amount > 0) {
-                return i;
-            }
-        }
-        return 0; // No belief
+        return agentCurrentBelief[agentId];
     }
 
     /**
-     * @notice Get agent's stake info for a belief
+     * @notice Get the MON value and share count of an agent's stake in a belief pool
      */
-    function getStakeInfo(uint256 agentId, uint256 beliefId)
+    function getAgentStakeValue(uint256 agentId, uint256 beliefId)
         external
         view
-        returns (StakeInfo memory)
+        returns (uint256 monValue, uint256 shares)
     {
-        return agentStakes[agentId][beliefId];
+        BeliefToken token = beliefs[beliefId].token;
+        address wallet = _getAgentWallet(agentId);
+        shares = token.balanceOf(wallet);
+
+        if (shares == 0) return (0, 0);
+
+        uint256 totalShares = token.totalSupply();
+        monValue = (shares * beliefs[beliefId].totalAssets) / totalShares;
     }
 
     /**
+     * @notice Preview how much MON would be received for burning shares
+     */
+    function previewRedeem(uint256 beliefId, uint256 shares)
+        external
+        view
+        returns (uint256 monOut)
+    {
+        BeliefToken token = beliefs[beliefId].token;
+        uint256 totalShares = token.totalSupply();
+        if (totalShares == 0) return 0;
+
+        monOut = (shares * beliefs[beliefId].totalAssets) / totalShares;
+    }
+
+    /**
+     * @notice Get the current share price (MON per share, scaled by 1e18)
+     */
+    function getSharePrice(uint256 beliefId)
+        external
+        view
+        returns (uint256 price)
+    {
+        BeliefToken token = beliefs[beliefId].token;
+        uint256 totalShares = token.totalSupply();
+        if (totalShares == 0) return 1e18;
+
+        price = (beliefs[beliefId].totalAssets * 1e18) / totalShares;
+    }
+
+    /**
+     * @notice Get the LP token address for a belief
+     */
+    function getBeliefToken(uint256 beliefId) external view returns (address) {
+        require(beliefId >= 1 && beliefId <= 4, "Invalid belief");
+        return address(beliefs[beliefId].token);
+    }
+
+/**
      * @notice Get debate details
      */
     function getDebate(uint256 debateId) external view returns (DebateEscrow memory) {
         return debates[debateId];
     }
 
-    /**
-     * @notice Get effective stake (with conviction multiplier)
-     */
-    function getEffectiveStake(uint256 agentId, uint256 beliefId)
-        external
-        view
-        returns (uint256)
-    {
-        StakeInfo memory stakeInfo = agentStakes[agentId][beliefId];
-        if (stakeInfo.amount == 0) return 0;
-
-        uint256 duration = block.timestamp - stakeInfo.stakedAt;
-        uint256 multiplier = 10000 + (duration * 10000 / convictionMultiplierPeriod);
-
-        return (stakeInfo.amount * multiplier) / 10000;
-    }
-
-    // ========== ADMIN FUNCTIONS ==========
+// ========== ADMIN FUNCTIONS ==========
 
     /**
      * @notice Set Chronicler address (who can submit verdicts)
@@ -475,6 +546,12 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         require(_penaltyBps <= 5000, "Penalty too high");
         stalematePenaltyBps = _penaltyBps;
         emit StalematePenaltyUpdated(_penaltyBps);
+    }
+
+    function setDebateDividendBps(uint256 _dividendBps) external onlyOwner {
+        require(_dividendBps <= 5000, "Dividend too high");
+        debateDividendBps = _dividendBps;
+        emit DebateDividendUpdated(_dividendBps);
     }
 
     // ========== INTERNAL FUNCTIONS ==========
@@ -532,25 +609,4 @@ contract BeliefPool is Ownable, ReentrancyGuard {
         }
     }
 
-    /**
-     * @notice Submit debate feedback to ReputationRegistry
-     */
-    function _submitDebateFeedback(
-        uint256 agentId,
-        int128 value,
-        string memory /* tag1 */
-    ) internal {
-        int128 oldScore = agentReputation[agentId];
-        int128 newScore = oldScore + value;
-
-        // Clamp between MIN and MAX
-        if (newScore > MAX_REPUTATION) {
-            newScore = MAX_REPUTATION;
-        } else if (newScore < MIN_REPUTATION) {
-            newScore = MIN_REPUTATION;
-        }
-
-        agentReputation[agentId] = newScore;
-        emit ReputationUpdated(agentId, newScore, value);
-    }
 }
