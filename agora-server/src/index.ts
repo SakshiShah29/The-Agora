@@ -13,6 +13,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 import { createDebateRouter } from "./routes/debate";
 import { createChroniclerRouter } from "./routes/chronicler";
+import { AGENT_CONVERSION_CONFIG, AGENT_DEFAULTS, AGENT_INFO } from "./config";
+import { createConversionRouter } from "./routes/conversion";
 
 dotenv.config();
 
@@ -24,6 +26,10 @@ app.use(express.json());
 function ts() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
+
+
+
+
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -156,29 +162,6 @@ async function connectMongo() {
   console.log("[mongo] connected");
 }
 
-// ─── Default belief state ────────────────────────────────────────────────────
-
-const AGENT_DEFAULTS: Record<string, any> = {
-  "6": {
-    agent: "seneca",
-    agentName: "Seneca",
-    agentId: 6,
-    coreBeliefId: 4,
-    beliefName: "classical-stoicism",
-    currentBelief: "classical-stoicism",
-    conviction: 88,
-  },
-  "5": {
-    agent: "nihilo",
-    agentName: "Nihilo",
-    agentId: 5,
-    coreBeliefId: 1,
-    beliefName: "constructive-nihilism",
-    currentBelief: "constructive-nihilism",
-    conviction: 85,
-  },
-};
-
 function defaultState(agentId: string) {
   const base = AGENT_DEFAULTS[agentId];
   if (!base) throw new Error(`Unknown agent ${agentId}`);
@@ -196,12 +179,6 @@ function defaultState(agentId: string) {
   };
 }
 
-// ─── Agent info for debate overlay ───────────────────────────────────────────
-
-const AGENT_INFO: Record<number, { name: string; belief: string; beliefId: number }> = {
-  5: { name: "Nihilo", belief: "constructive-nihilism", beliefId: 1 },
-  6: { name: "Seneca", belief: "classical-stoicism", beliefId: 4 },
-};
 
 // ─── Debate phase helpers (shared with routes/debate.ts) ─────────────────────
 
@@ -315,6 +292,11 @@ app.get("/api/agents/:id/state", async (req, res) => {
       agentName: clean.agentName || AGENT_DEFAULTS[agentId]?.agentName,
       beliefId: clean.coreBeliefId,
       beliefName: clean.beliefName || clean.currentBelief,
+       conviction: clean.conviction ?? AGENT_DEFAULTS[agentId]?.conviction ?? 85,  // ← NEW
+  conversionThreshold: AGENT_CONVERSION_CONFIG[agentId]?.conversionThreshold ?? 30,  // ← NEW
+  conversionTriggered: clean.conversionTriggered || false,  // ← NEW
+  conversionPhase: clean.conversionPhase || null,  // ← NEW
+  conversionTarget: clean.conversionTarget || null,  // ← NEW
       hasEnteredAgora: clean.hasEnteredAgora || false,
       isCurrentlyStaked: clean.isCurrentlyStaked || false,
       arrivalAnnounced: clean.arrivalAnnounced || false,
@@ -604,6 +586,13 @@ async function main() {
   });
   app.use(chroniclerRouter);
 
+  const conversionRouter = createConversionRouter(db, {
+  publicClient,
+  getWalletClient,
+  BELIEF_POOL,
+});
+app.use(conversionRouter);
+
 
   app.listen(PORT, () => {
     console.log(`\n${"═".repeat(60)}`);
@@ -637,6 +626,9 @@ async function main() {
     console.log(`    GET  /api/frontend/beliefs`);
     console.log(`    GET  /api/frontend/preaches`);
     console.log(`    GET  /api/frontend/verdicts`);
+    console.log(`    POST /api/agents/:id/conversion/confess`);
+console.log(`    POST /api/agents/:id/conversion/migrate`);
+console.log(`    POST /api/agents/:id/conversion/complete`);
     console.log(`${"═".repeat(60)}`);
     console.log(`  Waiting for agent requests...\n`);
   });

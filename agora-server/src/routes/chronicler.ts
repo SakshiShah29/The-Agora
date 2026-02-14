@@ -10,6 +10,7 @@
 
 import { Router } from "express";
 import type { Db } from "mongodb";
+import { AGENT_CONVERSION_CONFIG, AGENT_INFO } from "../config";
 
 function ts() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -29,6 +30,10 @@ const BELIEF_POOL_CHRONICLER_ABI = [
     outputs: [],
   },
 ] as const;
+
+
+
+
 
 // ─── Chronicler agent ID ─────────────────────────────────────────────────────
 
@@ -196,15 +201,64 @@ export function createChroniclerRouter(db: Db, deps: ChroniclerRouterDeps): Rout
         }
       );
 
-      // ─── DB: clear awaitingVerdict on both agents ───────────────────────
-      await db.collection("beliefStates").updateOne(
-        { agentId: debate.challengerId },
-        { $set: { awaitingVerdict: false } }
-      );
-      await db.collection("beliefStates").updateOne(
-        { agentId: debate.challengedId },
-        { $set: { awaitingVerdict: false } }
-      );
+    const CONVICTION_WIN = 4;
+const CONVICTION_LOSS = 4;
+
+if (winnerId !== null && loserId !== null) {
+  // Winner gains conviction
+  await db.collection("beliefStates").updateOne(
+    { agentId: winnerId },
+    { $inc: { conviction: CONVICTION_WIN } }
+  );
+
+  // Loser loses conviction
+  await db.collection("beliefStates").updateOne(
+    { agentId: loserId },
+    { $inc: { conviction: -CONVICTION_LOSS } }
+  );
+
+  // Read updated loser state to check conversion threshold
+  const loserState = await db.collection("beliefStates").findOne({ agentId: loserId });
+  const winnerState = await db.collection("beliefStates").findOne({ agentId: winnerId });
+
+  const loserConviction = loserState?.conviction ?? 0;
+  const loserThreshold = AGENT_CONVERSION_CONFIG[loserId.toString()]?.conversionThreshold ?? 30;
+
+  console.log(`[${ts()}]    chronicler: conviction update — winner ${winnerName}: ${(winnerState?.conviction ?? 0) - CONVICTION_WIN} → ${winnerState?.conviction ?? 0}`);
+  console.log(`[${ts()}]    chronicler: conviction update — loser ${loserName}: ${loserConviction + CONVICTION_LOSS} → ${loserConviction}`);
+
+  // Check if loser should convert
+  if (loserConviction < loserThreshold) {
+    const winnerInfo = AGENT_INFO[winnerId];
+    console.log(`[${ts()}]    chronicler: ⚡ CONVERSION TRIGGERED — ${loserName} conviction ${loserConviction} < threshold ${loserThreshold}`);
+    console.log(`[${ts()}]    chronicler: ${loserName} will convert to ${winnerInfo?.belief || "unknown"}`);
+
+    await db.collection("beliefStates").updateOne(
+      { agentId: loserId },
+      {
+        $set: {
+          conversionTriggered: true,
+          conversionTarget: {
+            beliefId: winnerInfo?.beliefId ?? 0,
+            beliefName: winnerInfo?.belief ?? "unknown",
+            defeatedBy: winnerName,
+            defeatedByAgentId: winnerId,
+          },
+        },
+      }
+    );
+  }
+}
+
+// ─── DB: clear awaitingVerdict on both agents ───────────────────────
+await db.collection("beliefStates").updateOne(
+  { agentId: debate.challengerId },
+  { $set: { awaitingVerdict: false } }
+);
+await db.collection("beliefStates").updateOne(
+  { agentId: debate.challengedId },
+  { $set: { awaitingVerdict: false } }
+);
 
       // ─── Get current conviction scores for response ─────────────────────
       const challengerState = await db.collection("beliefStates").findOne({

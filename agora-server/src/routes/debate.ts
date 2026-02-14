@@ -9,10 +9,12 @@
 import { Router } from "express";
 import type { Db } from "mongodb";
 import { parseEther, formatEther } from "viem";
+import { AGENT_INFO } from "../config";
 
 function ts() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
+
 
 // ─── Debate phase machine ────────────────────────────────────────────────────
 
@@ -25,12 +27,6 @@ function getPhaseAndRole(turnIndex: number): { phase: DebatePhase; role: "challe
   return { phase: DEBATE_PHASES[phaseIndex], role };
 }
 
-// ─── Agent config ────────────────────────────────────────────────────────────
-
-const AGENT_INFO: Record<number, { name: string; belief: string; beliefId: number }> = {
-  5: { name: "Nihilo", belief: "constructive-nihilism", beliefId: 1 },
-  6: { name: "Seneca", belief: "classical-stoicism", beliefId: 4 },
-};
 
 // ─── BeliefPool ABI (debate escrow functions only) ───────────────────────────
 
