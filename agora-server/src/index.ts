@@ -69,15 +69,15 @@ for (const [key, val] of Object.entries(process.env)) {
 
 // ─── Chain ───────────────────────────────────────────────────────────────────
 
-const localChain = defineChain({
-  id: 31337,
-  name: "Anvil",
-  nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+const monadTestnetChain = defineChain({
+  id: 10143,
+  name: "Monad Testnet",
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
 });
 
 const publicClient = createPublicClient({
-  chain: localChain,
+  chain: monadTestnetChain,
   transport: http(RPC_URL),
 });
 
@@ -87,7 +87,7 @@ function getWalletClient(agentId: string) {
   const account = privateKeyToAccount(pk);
   return createWalletClient({
     account,
-    chain: localChain,
+    chain: monadTestnetChain,
     transport: http(RPC_URL),
   });
 }
