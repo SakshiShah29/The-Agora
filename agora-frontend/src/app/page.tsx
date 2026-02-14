@@ -3,6 +3,7 @@ import { TempleStepsFeed } from "@/components/TempleStepsFeed";
 import { AgentGrid } from "@/components/AgentGrid";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { BeliefPools } from "@/components/BeliefPool";
+import { ArenaCarousel } from "@/components/ArenaCarousel";
 
 export default function Home() {
   return (
@@ -20,8 +21,10 @@ export default function Home() {
           <DebateArena />
         </div>
         <div className="lg:col-span-2">
-          <h2 className="mb-3 font-display text-lg font-bold text-agora-textSecondary">Temple Steps</h2>
-          <TempleStepsFeed />
+          <h2 className="mb-3 font-display text-lg font-bold text-agora-textSecondary">Arena Gallery</h2>
+          <div className="h-[600px]">
+            <ArenaCarousel />
+          </div>
         </div>
       </div>
 

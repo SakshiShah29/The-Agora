@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { ALL_AGENTS } from "@/lib/constants";
+import { ALL_AGENTS, BELIEF_COLORS } from "@/lib/constants";
 
 export async function GET(req: Request) {
   try {
@@ -9,7 +9,6 @@ export async function GET(req: Request) {
     const limit = parseInt(searchParams.get("limit") || "30");
     const events: any[] = [];
 
-    // Agent entries & stakes
     const states = await db.collection("beliefStates").find({}).toArray();
     for (const s of states as any[]) {
       const meta = ALL_AGENTS[s.agentId];
@@ -18,7 +17,8 @@ export async function GET(req: Request) {
       if (s.hasEnteredAgora) {
         events.push({
           type: "agent_entry", icon: "🏛️", agent: meta.name, agentId: s.agentId,
-          avatar: meta.avatar, description: `${meta.name} entered The Agora`,
+          avatar: meta.avatar, beliefColor: BELIEF_COLORS[meta.beliefId],
+          description: `${meta.name} entered The Agora`,
           txHash: s.entryTxHash || null,
           timestamp: s.entryTime ? new Date(s.entryTime).toISOString() : null,
         });
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
       if (s.isCurrentlyStaked) {
         events.push({
           type: "stake", icon: "💰", agent: meta.name, agentId: s.agentId,
-          avatar: meta.avatar, description: `${meta.name} staked 0.1 ETH on ${meta.belief}`,
+          avatar: meta.avatar, beliefColor: BELIEF_COLORS[meta.beliefId],
+          description: `${meta.name} staked 0.1 ETH on ${meta.belief}`,
           txHash: s.stakeTxHash || null,
           timestamp: s.entryTime ? new Date(s.entryTime + 1000).toISOString() : null,
         });
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
       events.push({
         type: "sermon", icon: "📜", agent: meta?.name || `Agent ${s.agentId}`,
         agentId: s.agentId, avatar: meta?.avatar || "default.png",
+        beliefColor: meta ? BELIEF_COLORS[meta.beliefId] : undefined,
         description: `${meta?.name || "Agent"} delivered ${s.type || "sermon"}`,
         txHash: null, timestamp: s.createdAt,
       });
@@ -48,9 +50,13 @@ export async function GET(req: Request) {
     // Debate events
     const debates = await db.collection("debates").find({}).sort({ createdAt: -1 }).limit(20).toArray();
     for (const d of debates as any[]) {
+      const challengerMeta = ALL_AGENTS[d.challengerId];
+      const challengedMeta = ALL_AGENTS[d.challengedId];
+
       events.push({
         type: "debate_challenge", icon: "⚔️", agent: d.challengerName,
-        agentId: d.challengerId, avatar: ALL_AGENTS[d.challengerId]?.avatar || "default.png",
+        agentId: d.challengerId, avatar: challengerMeta?.avatar || "default.png",
+        beliefColor: challengerMeta ? BELIEF_COLORS[challengerMeta.beliefId] : undefined,
         description: `${d.challengerName} challenged ${d.challengedName}`,
         txHash: d.createTxHash || null, timestamp: d.createdAt,
       });
@@ -58,7 +64,8 @@ export async function GET(req: Request) {
       if (d.acceptTxHash) {
         events.push({
           type: "debate_accept", icon: "🤝", agent: d.challengedName,
-          agentId: d.challengedId, avatar: ALL_AGENTS[d.challengedId]?.avatar || "default.png",
+          agentId: d.challengedId, avatar: challengedMeta?.avatar || "default.png",
+          beliefColor: challengedMeta ? BELIEF_COLORS[challengedMeta.beliefId] : undefined,
           description: `${d.challengedName} accepted the challenge`,
           txHash: d.acceptTxHash, timestamp: d.acceptedAt,
         });
@@ -69,6 +76,7 @@ export async function GET(req: Request) {
         events.push({
           type: "verdict", icon: "⚖️", agent: "Chronicler", agentId: 9,
           avatar: "chronicler.png",
+          beliefColor: BELIEF_COLORS[0],
           description: isStalemate
             ? `STALEMATE — ${d.challengerName} vs ${d.challengedName}`
             : `VERDICT: ${d.winnerName} defeats ${d.loserName}`,

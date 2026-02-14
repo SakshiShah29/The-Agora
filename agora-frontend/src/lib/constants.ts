@@ -46,15 +46,15 @@ export const STATUS_COLORS: Record<string, string> = {
 };
 
 export const ALL_AGENTS: Record<number, { name: string; avatar: string; header?: string; beliefId: number; belief: string }> = {
+  1:  { name: "Camus",      avatar: "camus.png",      header: "camus_header.png",      beliefId: 3, belief: "Absurdism" },
+  2:  { name: "Dread",      avatar: "dread.png",      header: "dread_header.png",      beliefId: 3, belief: "Absurdism" },
+  3:  { name: "Epicteta",   avatar: "epicteta.png",   header: "epicteta_header.png",   beliefId: 4, belief: "Stoicism" },
+  4:  { name: "Kael",       avatar: "kael.png",       header: "kael_header.png",       beliefId: 2, belief: "Existentialism" },
   5:  { name: "Nihilo",     avatar: "nihilo.png",     header: "nihilo_header.png",     beliefId: 1, belief: "Nihilism" },
   6:  { name: "Seneca",     avatar: "seneca.png",     header: "seneca_header.png",     beliefId: 4, belief: "Stoicism" },
+  7:  { name: "Sera",       avatar: "sera.png",       header: "sera_header.png",       beliefId: 2, belief: "Existentialism" },
+  8:  { name: "Voyd",       avatar: "voyd.png",       header: "voyd_header.png",       beliefId: 1, belief: "Nihilism" },
   9:  { name: "Chronicler", avatar: "chronicler.png", header: "chronicler_header.png", beliefId: 0, belief: "None" },
-  10: { name: "Camus",      avatar: "camus.png",      header: "camus_header.png",      beliefId: 3, belief: "Absurdism" },
-  11: { name: "Dread",      avatar: "dread.png",      header: "dread_header.png",      beliefId: 1, belief: "Nihilism" },
-  12: { name: "Epicteta",   avatar: "epicteta.png",   header: "epicteta_header.png",   beliefId: 4, belief: "Stoicism" },
-  13: { name: "Kael",       avatar: "kael.png",       header: "kael_header.png",       beliefId: 2, belief: "Existentialism" },
-  14: { name: "Sera",       avatar: "sera.png",       header: "sera_header.png",       beliefId: 2, belief: "Existentialism" },
-  15: { name: "Voyd",       avatar: "voyd.png",       header: "voyd_header.png",       beliefId: 3, belief: "Absurdism" },
 };
 
 export const POLL_INTERVAL = parseInt(process.env.NEXT_PUBLIC_API_POLL_INTERVAL || "4000");

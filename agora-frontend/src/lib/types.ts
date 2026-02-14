@@ -64,6 +64,7 @@ export interface FeedEvent {
   agent: string;
   agentId: number;
   avatar: string;
+  beliefColor?: string;
   description: string;
   txHash: string | null;
   timestamp: string | null;

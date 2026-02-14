@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="noise-bg min-h-screen bg-agora-bg text-agora-text antialiased">
         <div className="relative z-10">
           <Navbar />
-          <main className="mx-auto max-w-7xl px-4 pb-20 pt-6">{children}</main>
+          <main className="mx-auto max-w-8xl px-12 pb-20 pt-6">{children}</main>
         </div>
       </body>
     </html>

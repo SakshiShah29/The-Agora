@@ -39,7 +39,7 @@ export function ActivityFeed() {
             }`}
           >
             <span className="text-base">{event.icon}</span>
-            <AgentAvatar avatar={event.avatar} name={event.agent} size="sm" />
+            <AgentAvatar avatar={event.avatar} name={event.agent} size="sm" beliefColor={event.beliefColor} />
             <span className={`flex-1 text-sm ${isVerdict ? "font-medium text-agora-gold" : "text-agora-textSecondary"}`}>
               {event.description}
             </span>

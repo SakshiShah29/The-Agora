@@ -12,6 +12,8 @@ export async function GET() {
       const id = parseInt(idStr);
       const state = stateMap.get(id) as any;
 
+      const isActive = id !== 9;
+
       if (state) {
         return {
           agentId: id,
@@ -28,7 +30,7 @@ export async function GET() {
           totalPreaches: (state.sermonsDelivered || 0) + (state.postOnboardPreaches || 0),
           entryTxHash: state.entryTxHash || null,
           stakeTxHash: state.stakeTxHash || null,
-          active: true,
+          active: isActive,
         };
       }
 
@@ -40,14 +42,14 @@ export async function GET() {
         belief: meta.belief,
         beliefColor: BELIEF_COLORS[meta.beliefId] || "#6b7280",
         conviction: 0,
-        status: "coming_soon",
+        status: isActive ? "not_entered" : "coming_soon",
         hasEnteredAgora: false,
         isCurrentlyStaked: false,
         sermonsDelivered: 0,
         totalPreaches: 0,
         entryTxHash: null,
         stakeTxHash: null,
-        active: false,
+        active: isActive,
       };
     });
 
