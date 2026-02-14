@@ -4,19 +4,18 @@
     "name": "Unknown"
   },
   "deployment": {
-    "timestamp": 1770810629,
+    "timestamp": 1771092153,
     "version": "3.0"
   },
   "contracts": {
-    "BeliefPool": "0xD3Eb75De9008B1e94a508241Cbe1dE64E1CE9D9F",
-    "AgoraGate": "0x5e629A3901524a82149BaC35A405ce76660F7DEe"
+    "BeliefPool": "0x48bD83c50B0Ee3ba2096f3964B8C0b5c886cAE72",
+    "AgoraGate": "0x652f3486a01d99789c8D102b7074a6C442B25743"
   },
   "configuration": {
-    "chroniclerAddress": "0x98C401a3f0d7a43e7c49AF79e0D0180Fc26aed24",
+    "chroniclerAddress": "0x4F3952e7ed3147Bba7218c4D4b22e2D1A73f9a16",
     "identityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
-    "reputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
     "stalematePenaltyBps": 1000,
-    "convictionPeriod": 2592000,
+    "debateDividendBps": 1000,
     "entryFee": "10000000000000000"
   },
   "beliefs": [

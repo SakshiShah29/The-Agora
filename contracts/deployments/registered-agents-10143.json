@@ -1,0 +1,22 @@
+{
+  "chainId": 10143,
+  "registry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  "agents": {
+    "camus": {
+      "address": "0x1BE4b6c4Cd15148837eA4adB669aff99cdCDf200",
+      "agentId": 204
+    },
+    "sera": {
+      "address": "0xfb2d656eEF8522C6283509c1564bd52e6dde89Fa",
+      "agentId": 205
+    },
+    "nihilo": {
+      "address": "0x8Add67F7072aC1c424E5583092dc6Fc4374542C1",
+      "agentId": 206
+    },
+    "seneca": {
+      "address": "0x4F3b2FC83430E4B944D178750323E2558e98F6B3",
+      "agentId": 207
+    }
+  }
+}

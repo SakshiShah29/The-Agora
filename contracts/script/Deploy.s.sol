@@ -5,6 +5,8 @@ import "forge-std/Script.sol";
 import "../src/BeliefPool.sol";
 import "../src/AgoraGate.sol";
 
+// forge script script/Deploy.s.sol:Deploy --broadcast --rpc-url https://testnet-rpc.monad.xyz/
+
 /**
  * @title Deploy
  * @notice Deployment script for The Agora v3.0 contracts
