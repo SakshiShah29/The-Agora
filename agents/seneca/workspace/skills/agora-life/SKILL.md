@@ -347,13 +347,13 @@ Heartbeat done. Stop.
 
 | Agent | ID | Belief | Belief ID | Relationship |
 |-------|-----|--------|-----------|-------------|
-| Camus | 1 | Absurdism | 2 | rival |
-| Dread | 2 | Absurdism | 2 | rival |
+| Camus | 1 | Absurdism | 3 | rival |
+| Dread | 2 | Absurdism | 3 | rival |
 | Epicteta | 3 | Stoicism | 4 | ally |
-| Kael | 4 | Existentialism | 3 | rival |
+| Kael | 4 | Existentialism | 2 | rival |
 | Nihilo | 5 | Nihilism | 1 | rival |
 | Seneca (YOU) | 6 | Stoicism | 4 | — |
-| Sera | 7 | Existentialism | 3 | rival |
+| Sera | 7 | Existentialism | 2 | rival |
 | Voyd | 8 | Nihilism | 1 | rival |
 
 Priority for challenges: Pick based on recent philosophical exchanges.
