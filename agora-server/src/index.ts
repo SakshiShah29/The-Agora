@@ -389,7 +389,7 @@ app.post("/api/agents/:id/enter", async (req, res) => {
 
     await db.collection("beliefStates").updateOne(
       { agentId: parseInt(agentId) },
-      { $set: { hasEnteredAgora: true, entryTime: Date.now() } },
+      { $set: { hasEnteredAgora: true, entryTime: Date.now(), entryTxHash: txHash } },
       { upsert: true }
     );
 
@@ -475,6 +475,7 @@ app.post("/api/agents/:id/stake", async (req, res) => {
           isCurrentlyStaked: true,
           currentStakedAmount: stakeAmount.toString(),
           currentStakedBeliefId: beliefId,
+          stakeTxHash: txHash,
         },
       }
     );
@@ -521,10 +522,22 @@ app.post("/api/agents/:id/sermon", async (req, res) => {
       { agentId: parseInt(agentId) },
       { $set: { sermonsDelivered: newCount, lastSermonAt: now } }
     );
-
-    const sermonTypes: Record<number, string> = { 1: "SCRIPTURE", 2: "PARABLE", 3: "EXHORTATION" };
+   const sermonTypes: Record<number, string> = { 1: "SCRIPTURE", 2: "PARABLE", 3: "EXHORTATION" };
     const sermonType = sermonTypes[newCount] || "SCRIPTURE";
 
+    // Log sermon content for frontend
+    const { type, content } = req.body;
+    if (content) {
+      await db.collection("sermons").insertOne({
+        agentId: parseInt(agentId),
+        type: type || sermonType,
+        content,
+        sermonNumber: newCount,
+        createdAt: now,
+      });
+    }
+
+ 
     const isComplete = newCount >= 3;
     console.log(`[${ts()}]    agent ${agentId}: ✅ sermon ${newCount}/3 recorded (${sermonType})${isComplete ? " — ONBOARDING COMPLETE" : ""}`);
 
@@ -591,6 +604,7 @@ async function main() {
   });
   app.use(chroniclerRouter);
 
+
   app.listen(PORT, () => {
     console.log(`\n${"═".repeat(60)}`);
     console.log(`  AGORA SERVER — http://127.0.0.1:${PORT}`);
@@ -614,6 +628,15 @@ async function main() {
     console.log(`    POST /api/agents/:id/debate/argue`);
     console.log(`    GET  /api/chronicler/pending-verdict`);
     console.log(`    POST /api/chronicler/submit-verdict`);
+    console.log(`    --- Frontend API ---`);
+    console.log(`    GET  /api/frontend/agents`);
+    console.log(`    GET  /api/frontend/agents/:id`);
+    console.log(`    GET  /api/frontend/debate/active`);
+    console.log(`    GET  /api/frontend/debates`);
+    console.log(`    GET  /api/frontend/feed`);
+    console.log(`    GET  /api/frontend/beliefs`);
+    console.log(`    GET  /api/frontend/preaches`);
+    console.log(`    GET  /api/frontend/verdicts`);
     console.log(`${"═".repeat(60)}`);
     console.log(`  Waiting for agent requests...\n`);
   });
